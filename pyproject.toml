@@ -3,7 +3,7 @@ requires = ["uv_build>=0.9.22,<0.10.0"]
 build-backend = "uv_build"
 
 [project]
-name = "pypsa_network_analyzer"
+name = "pypsa-network-analyzer"
 version = "0.0.1"
 description = "A short description of the project."
 authors = [
@@ -19,9 +19,19 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi==0.115.6",
-    "torch==2.6.0",
+    "pandas>=3.0.0",
     "typer==0.15.1",
     "uvicorn==0.34.0",
+    "entsoe-py>=0.7.8",
+    "numpy>=2.3.0,<2.4.0",
+    "ipykernel>=7.1.0",
+    "hydra-core>=1.3.0",
+    "pydantic>=2.12.5",
+    "dvc-gs>=3.0.2",
+    "markdown>=3.10.1",
+    "loguru>=0.7.3",
+    "hydra-core>=1.3.2",
+    "pypsa>=1.0.7",
 ]
 
 [dependency-groups]
@@ -34,6 +44,8 @@ dev = [
     "mypy==1.19.1",
     "mkdocs-material==9.7.1",
     "mkdocstrings-python==2.0.1",
+    "plotly>=6.5.2",
+    "openpyxl>=3.1.5",
 ]
 
 
