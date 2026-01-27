@@ -1,0 +1,23 @@
+defaults:
+  - _self_
+
+simulations:
+  - "hindcast_dyn_old"
+  - "hindcast_std_old"
+  - "hindcast-dyn"
+  - "hindcast-std"
+  - "hindcast-dyn-2022"
+  - "hindcast-dyn-spec-cap"
+  - "hindcast-dyn-spec-cap-rolling"
+  - "hindcast-dyn-spec-cap-irena"
+  - "hindcast-dyn-spec-cap-rolling-irena"
+  - "hindcast-dyn-rolling"
+
+weather_year_dict:
+    - weather_year_2020: 2020
+    - weather_year_2021: 2021
+    - weather_year_2022: 2022
+    - weather_year_2023: 2023
+    - weather_year_2024: 2024
+
+api_key: YOUR-ENTSOE-API-KEY

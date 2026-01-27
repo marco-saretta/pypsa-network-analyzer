@@ -1,5 +1,10 @@
 docs/site/
 
+# Hydra
+outputs/*
+
+# Other
+stuff/*
 # test cache
 manual_test/
 
