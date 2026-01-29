@@ -1,17 +1,10 @@
 defaults:
+  - simulations: network_files
   - _self_
 
-simulations:
-  - "hindcast_dyn_old"
-  - "hindcast_std_old"
-  - "hindcast-dyn"
-  - "hindcast-std"
-  - "hindcast-dyn-2022"
-  - "hindcast-dyn-spec-cap"
-  - "hindcast-dyn-spec-cap-rolling"
-  - "hindcast-dyn-spec-cap-irena"
-  - "hindcast-dyn-spec-cap-rolling-irena"
-  - "hindcast-dyn-rolling"
+paths:
+  log: "./runs"
+  data: "../data"
 
 weather_year_dict:
   - weather_year_2020: 2020

@@ -1,37 +1,15 @@
-from scripts import NetworkAnalyzer, ResultAnalyzer
-from utils import get_logger, merge_dataframes
-from tqdm import tqdm
-import gc
+from pypsa_network_analyzer import network_analyzer
+import hydra
+from omegaconf import DictConfig
 
-logger = get_logger()
+@hydra.main(version_base=None, config_path="configs", config_name="default_config")
+def main(cfg: DictConfig) -> None:
+    print(cfg)
+    return
 
-simulations = [
-    # "hindcast_dyn_old",
-    # "hindcast_std_old",
-    "hindcast-dyn",
-    # "hindcast-std",
-    # "hindcast-dyn-2022",
-    # "hindcast-dyn-spec-cap",
-    # "hindcast-dyn-spec-cap-rolling",
-    # "hindcast-dyn-spec-cap-irena",
-    # "hindcast-dyn-spec-cap-rolling-irena",
-    # "hindcast-dyn-rolling",
-]
+if __name__ == "__main__":
+    main()
 
-weather_year_dict = {
-    "weather_year_2020": 2020,
-    "weather_year_2021": 2021,
-    "weather_year_2022": 2022,
-    "weather_year_2023": 2023,
-    "weather_year_2024": 2024
-}
-
-network_file = "base_s_39_elec_Ept.nc"
-# network_file = "base_s_39_elec_.nc"
-export_format = "pdf"
-exclude_countries = ['MK']  # Add problematic countries here
-
-logger.info("=== Starting Batch Run ===")
 
 # for simulation in tqdm(simulations, desc="Processing Simulations"):
 
