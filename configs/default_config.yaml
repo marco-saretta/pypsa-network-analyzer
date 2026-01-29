@@ -14,10 +14,20 @@ simulations:
   - "hindcast-dyn-rolling"
 
 weather_year_dict:
-    - weather_year_2020: 2020
-    - weather_year_2021: 2021
-    - weather_year_2022: 2022
-    - weather_year_2023: 2023
-    - weather_year_2024: 2024
+  - weather_year_2020: 2020
+  - weather_year_2021: 2021
+  - weather_year_2022: 2022
+  - weather_year_2023: 2023
+  - weather_year_2024: 2024
 
 api_key: YOUR-ENTSOE-API-KEY
+
+network_file:
+  - "base_s_39_elec_Ept.nc"
+
+export_format:
+  - "pdf"
+
+exclude_countries:
+  - 'MK'  # Add problematic countries here
+
