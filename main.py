@@ -1,6 +1,7 @@
 import hydra
 from omegaconf import DictConfig
 from tqdm import tqdm 
+from pathlib import Path
 
 from pypsa_network_analyzer import NetworkAnalyzer
 from pypsa_network_analyzer import setup_logger

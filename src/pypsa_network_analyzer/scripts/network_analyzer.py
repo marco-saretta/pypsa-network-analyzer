@@ -17,44 +17,26 @@ class NetworkAnalyzer:
                  config: DictConfig,
                  simulation: str, 
                  weather_year: str,
-                 logger: Optional[logging.Logger] = None
+                 logger: Optional[logging.Logger]
                  ):
         
-        # Use default logger if none provided
-        if logger is None:
-            logging.basicConfig(level=logging.INFO)
-            self.logger = logging.getLogger(__name__)
-        else:
-            self.logger = logger
-
-        self.logger.info(f"STARTING ANALISYS - {simulation} | {weather_year}")
+        self.logger = logger
+        self.config = config
+        self.simulation = simulation
+        self.weather_year = weather_year       
         
-        # Read export file format of plot
-        self.file_format = config.plots_format_export.lower()
-        if self.file_format not in {"png", "pdf", "svg"}:
-            raise ValueError("plots_format_export must be one of: 'png', 'pdf', 'svg'")
-
-        # Set up directories and read network file
-        self._set_directories(simulation, weather_year)
-        
-        # Get network components
-        self._get_network_components()
-        
-        # Generation dispatch
-        self.gen_t_bus, self.gen_filtered_t_bus = self.compute_dispatch()
-        
-        # Plot settings
         self._plot_settings()
+        self._set_directories(simulation, weather_year)
+        self._get_network_components()
+        self.gen_t_bus, self.gen_filtered_t_bus = self.compute_dispatch()
 
-        # weather year is deined as a string like "weather_year_2022", but we only need "2022" for file paths
-        self.weather_year = weather_year.split("_")[-1]
-        
     def _set_directories(self, simulation: str, weather_year: str):
         """Configure key directories using pathlib."""
         # Get the directory of the current script file
         self.file_dir = Path(__file__).resolve()
         
-        self.root_dir = self.file_dir.parent.parent.parent.parent.resolve()
+        self.root_dir = Path(self.config.paths.root)
+        
         self.results_dir = self.root_dir / 'results'
         self.results_dir.mkdir(parents=True, exist_ok=True)
         
@@ -65,14 +47,14 @@ class NetworkAnalyzer:
         self.network_file_name =  Path(simulation + ".nc")
         self.network_file_dir = self.root_dir / "data" / "network_files" / self.network_file_name
         
-        self.weather_year_dir = self.sim_dir / weather_year
+        self.weather_year_dir = self.sim_dir / str(weather_year)
         self.weather_year_dir.mkdir(parents=True, exist_ok=True)
         
     def _get_network_components(self) -> None:
         
         # Load the PyPSA network
         self.n = pypsa.Network(self.network_file_dir)
-        
+        self.logger.info('Correctly read network file')
         # Extract buses from network file
         self.buses = self.n.generators.bus.unique()
 
