@@ -3,6 +3,8 @@ import pypsa
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
+from omegaconf import DictConfig
+
 import logging
 
 
@@ -12,10 +14,9 @@ class NetworkAnalyzer:
     """
 
     def __init__(self, 
-                 simulation_folder: str, 
+                 config: DictConfig,
+                 simulation: str, 
                  weather_year: str,
-                 network_file: str = 'base_s_39_elec_Ept.nc',
-                 plots_format_export: str = 'pdf',
                  logger: Optional[logging.Logger] = None
                  ):
         
@@ -26,15 +27,15 @@ class NetworkAnalyzer:
         else:
             self.logger = logger
 
-        self.logger.info(f"STARTING ANALISYS - {simulation_folder} | {weather_year}")
+        self.logger.info(f"STARTING ANALISYS - {simulation} | {weather_year}")
         
         # Read export file format of plot
-        self.file_format = plots_format_export.lower()
+        self.file_format = config.plots_format_export.lower()
         if self.file_format not in {"png", "pdf", "svg"}:
             raise ValueError("plots_format_export must be one of: 'png', 'pdf', 'svg'")
 
         # Set up directories and read network file
-        self._set_directories(simulation_folder, network_file, weather_year)
+        self._set_directories(simulation, weather_year)
         
         # Get network components
         self._get_network_components()
@@ -48,44 +49,25 @@ class NetworkAnalyzer:
         # weather year is deined as a string like "weather_year_2022", but we only need "2022" for file paths
         self.weather_year = weather_year.split("_")[-1]
         
-    def _set_directories(self, simulation_folder: str, network_file: str, weather_year: str):
+    def _set_directories(self, simulation: str, weather_year: str):
         """Configure key directories using pathlib."""
         # Get the directory of the current script file
         self.file_dir = Path(__file__).resolve()
-        # Navigate to parent directory (scripts folder) then to root project directory
-        self.base_dir = self.file_dir.parent.parent.resolve()
         
-        # Set path to simulations directory
-        self.base_sim_dir = self.base_dir / 'simulations'
+        self.root_dir = self.file_dir.parent.parent.parent.parent.resolve()
+        self.results_dir = self.root_dir / 'results'
+        self.results_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set path to the specific simulation folder
-        self.sim_dir = self.base_sim_dir / simulation_folder
-        
-        # Create results directory at simulation level
-        self.base_res_dir = self.sim_dir / "results_concat"
-        self.base_res_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Search for the first available weather year directory
+        self.sim_dir = self.results_dir  / simulation
+        self.res_concat_dir = self.sim_dir / "results_concat"
+        self.res_concat_dir.mkdir(parents=True, exist_ok=True)
 
-        sim_wy_dir = self.sim_dir / weather_year
-            
-        # If weather year directory exists, set it as active and break loop
-        if sim_wy_dir.exists():
-                self.sim_wy_dir = sim_wy_dir
-                
-                # Set path to networks subdirectory
-                self.network_folder_dir = sim_wy_dir / "networks"
-                
-                # Set path to specific network file
-                self.network_file_dir =  self.network_folder_dir / network_file
-                
-                # Set path to results directory for this weather year
-                self.sim_res_dir = self.sim_wy_dir / "results"
-                # Create results directory if it doesn't exist
-                self.sim_res_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            raise Warning(f"Weather year directory '{weather_year}' not found in simulation '{simulation_folder}'.")
-    
+        self.network_file_name =  Path(simulation + ".nc")
+        self.network_file_dir = self.root_dir / "data" / "network_files" / self.network_file_name
+        
+        self.weather_year_dir = self.sim_dir / weather_year
+        self.weather_year_dir.mkdir(parents=True, exist_ok=True)
+        
     def _get_network_components(self) -> None:
         
         # Load the PyPSA network

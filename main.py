@@ -1,17 +1,60 @@
-from pypsa_network_analyzer import network_analyzer
 import hydra
 from omegaconf import DictConfig
+from tqdm import tqdm 
+
+from pypsa_network_analyzer import NetworkAnalyzer
+from pypsa_network_analyzer import setup_logger
+
+log = setup_logger()
 
 @hydra.main(version_base=None, config_path="configs", config_name="default_config")
 def main(cfg: DictConfig) -> None:
-    print(cfg)
-    return
+    
+    # Setup logger
+    logger = setup_logger(log_dir=cfg.paths.log)
+    logger.info("Starting PyPSA Network Analysis Pipeline")
+    
+    # Iterate over simulations and weather years
+    for simulation in tqdm(cfg.simulations, desc="Simulations"):
+        for weather_year in tqdm(cfg.weather_years, desc="Weather Years", leave=False):
+            try:
+                network_analyzer = NetworkAnalyzer(
+                    config=cfg,
+                    simulation=simulation,
+                    weather_year=weather_year,
+                    logger=logger
+                )
+                # network_analyzer.extract_summary()
+                # network_analyzer.plot_all_figures()
+                logger.info(f"Yay! Completed {simulation} | {weather_year}")
+                
+            except Exception as e:
+                logger.error(f"Ney! Error in {simulation} | {weather_year}: {e}")
+            
+            # finally:
+            #     del network_analyzer
 
 if __name__ == "__main__":
     main()
+    
+    
+# TODO
+# $ cd GitHub/pypsa_network_analyzer/
+
+# $ uv run  main.py
+# Error executing job with overrides: []
+# Traceback (most recent call last):
+#   File "C:\Users\mcsr\GitHub\pypsa_network_analyzer\main.py", line 14, in main
+#     logger = setup_logger(log_dir=cfg.paths.log)
+#                                   ^^^^^^^^^
+# omegaconf.errors.ConfigAttributeError: Key 'paths' is not in struct
+#     full_key: paths
+#     object_type=dict
+
+# Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
 
 
-# for simulation in tqdm(simulations, desc="Processing Simulations"):
+
 
 #     # === PHASE 1: Network Analysis (Optional) ===
 #     # Uncomment to process network files

@@ -2419,6 +2419,7 @@ dependencies = [
     { name = "pypsa" },
     { name = "pytest" },
     { name = "scikit-learn" },
+    { name = "tqdm" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
@@ -2451,6 +2452,7 @@ requires-dist = [
     { name = "pypsa", specifier = ">=1.0.7" },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "typer", specifier = "==0.15.1" },
     { name = "uvicorn", specifier = "==0.34.0" },
 ]

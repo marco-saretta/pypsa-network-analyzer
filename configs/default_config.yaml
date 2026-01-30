@@ -2,25 +2,28 @@ defaults:
   - simulations: network_files
   - _self_
 
-paths:
-  log: "./runs"
-  data: "../data"
-
-weather_year_dict:
-  - weather_year_2020: 2020
-  - weather_year_2021: 2021
-  - weather_year_2022: 2022
-  - weather_year_2023: 2023
-  - weather_year_2024: 2024
+weather_years:
+  - 2020
+  - 2021
+  - 2022
+  - 2023
+  - 2024
 
 api_key: YOUR-ENTSOE-API-KEY
 
-network_file:
-  - "base_s_39_elec_Ept.nc"
-
-export_format:
-  - "pdf"
-
+# Per-simulation config
+plot_export_format: "pdf"
 exclude_countries:
   - 'MK'  # Add problematic countries here
 
+# Processing phases (toggle on/off)
+phases:
+  analyze_networks: true
+  merge_dataframes: true
+  compute_scores: true
+
+# Metrics to compute
+metrics:
+  - mae
+  - rmse
+  - smape

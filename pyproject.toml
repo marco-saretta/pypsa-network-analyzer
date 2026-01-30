@@ -28,6 +28,7 @@ dependencies = [
     "pypsa>=1.0.7",
     "pytest>=8.3.4",
     "scikit-learn>=1.8.0",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
