@@ -14,17 +14,16 @@ class NetworkAnalyzer:
     """
 
     def __init__(self, 
-                 config: DictConfig,
+                 config: DictConfig, 
                  simulation: str, 
-                 weather_year: str,
-                 logger: Optional[logging.Logger]
-                 ):
+                 weather_year: str, 
+                 logger: Optional[logging.Logger]):
         
         self.logger = logger
         self.config = config
         self.simulation = simulation
-        self.weather_year = weather_year       
-        
+        self.weather_year = weather_year
+
         self._plot_settings()
         self._set_directories(simulation, weather_year)
         self._get_network_components()
@@ -32,39 +31,38 @@ class NetworkAnalyzer:
 
     def _set_directories(self, simulation: str, weather_year: str):
         """Configure key directories using pathlib."""
-        # Get the directory of the current script file
+
+        # Set file and root directory
         self.file_dir = Path(__file__).resolve()
-        
         self.root_dir = Path(self.config.paths.root)
-        
-        self.results_dir = self.root_dir / 'results'
+
+        self.results_dir = self.root_dir / "results"
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.sim_dir = self.results_dir  / simulation
+
+        self.sim_dir = self.results_dir / simulation
         self.res_concat_dir = self.sim_dir / "results_concat"
         self.res_concat_dir.mkdir(parents=True, exist_ok=True)
 
-        self.network_file_name =  Path(simulation + ".nc")
+        self.network_file_name = Path(simulation + ".nc")
         self.network_file_dir = self.root_dir / "data" / "network_files" / self.network_file_name
-        
+
         self.weather_year_dir = self.sim_dir / str(weather_year)
         self.weather_year_dir.mkdir(parents=True, exist_ok=True)
-        
+
     def _get_network_components(self) -> None:
-        
         # Load the PyPSA network
         self.n = pypsa.Network(self.network_file_dir)
-        self.logger.info('Correctly read network file')
+        self.logger.info("Correctly read network file")
         # Extract buses from network file
         self.buses = self.n.generators.bus.unique()
 
         # Extract hydro and pumped hydro storage units
-        self.hydro_units = self.n.storage_units[self.n.storage_units['carrier'] == 'hydro']
-        self.phs_units = self.n.storage_units[self.n.storage_units['carrier'] == 'PHS']
-        
+        self.hydro_units = self.n.storage_units[self.n.storage_units["carrier"] == "hydro"]
+        self.phs_units = self.n.storage_units[self.n.storage_units["carrier"] == "PHS"]
+
         # Clean carriers without valid color information
         carriers = self.n.carriers
-        carriers = carriers[carriers.index != '']
+        carriers = carriers[carriers.index != ""]
         carriers = carriers[~carriers.color.isna()]
         carriers = carriers[carriers.color != ""]
         self.n.carriers = carriers
