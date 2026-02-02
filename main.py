@@ -2,9 +2,10 @@ import hydra
 from omegaconf import DictConfig
 from tqdm import tqdm
 from pathlib import Path
+import gc
 
-from pypsa_network_analyzer import NetworkAnalyzer
-from pypsa_network_analyzer import setup_logger
+from pypsa_network_analyzer import NetworkAnalyzer, ScoreAnalyzer
+from pypsa_network_analyzer import setup_logger, merge_dataframes
 
 log = setup_logger()
 
@@ -24,12 +25,24 @@ def main(cfg: DictConfig) -> None:
                 logger=logger
             )
             network_analyzer.extract_summary()
-            network_analyzer.plot_all_figures()
+            #network_analyzer.plot_all_figures()
             logger.info(f"YES! Processed {network_file}")
+            gc.collect()
 
         except Exception as e:
             logger.error(f"NOPE! Processing {network_file} returns error {e}", exc_info=True)
 
+    # Merge results from weather years
+    for simulation_to_be_merged in tqdm(cfg.config_results_concat.keys()):
+        
+        logger.info(f"START - Merge data for {simulation_to_be_merged}")
+    #     for df_name in ['electricity_prices', 'generators_dispatch']:
+    #         merge_dataframes(
+    #             simulation_folder=simulation,
+    #             df_to_merge=df_name,
+    #             weather_year_dict=weather_year_dict,
+    #             logger=logger
+    #         )
             
             
 if __name__ == "__main__":
@@ -37,18 +50,6 @@ if __name__ == "__main__":
 
 
 # TODO
-
-#     # === PHASE 2: Merge DataFrames ===
-#     #  Uncomment to merge results from weather years
-#     logger.info(f"Merging data for {simulation}...")
-#     for df_name in ['electricity_prices', 'generators_dispatch']:
-#         merge_dataframes(
-#             simulation_folder=simulation,
-#             df_to_merge=df_name,
-#             weather_year_dict=weather_year_dict,
-#             logger=logger
-#         )
-
 #     # === PHASE 3: Compute Scores ===
 
 #     logger.info(f"\n--- Analyzing {simulation} ---")

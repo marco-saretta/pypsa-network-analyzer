@@ -6,9 +6,9 @@ network_files:
 # Hindcast dynamic old
 - "hindcast_dyn_old_wy2020.nc"
 - "hindcast_dyn_old_wy2021.nc"
-# - "hindcast_dyn_old_wy2022.nc"
-# - "hindcast_dyn_old_wy2023.nc"
-# - "hindcast_dyn_old_wy2024.nc"
+- "hindcast_dyn_old_wy2022.nc"
+- "hindcast_dyn_old_wy2023.nc"
+- "hindcast_dyn_old_wy2024.nc"
 # # Hindcast standard old
 # - "hindcast_std_old_wy2020.nc"
 # - "hindcast_std_old_wy2021.nc"

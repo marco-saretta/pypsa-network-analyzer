@@ -2,12 +2,11 @@ from pathlib import Path
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from matplotlib import pyplot as plt
-from utils import smape
+from pypsa_network_analyzer.utils import smape
 
 
-class ResultAnalyzer:
+class ScoreAnalyzer:
     """Compare benchmark vs hindcast electricity prices with MAE, RMSE, and SMAPE metrics."""
-
 
     def __init__(self, simulation_folder, file_to_examine, weather_years_list, logger):
         self.logger = logger
@@ -20,9 +19,7 @@ class ResultAnalyzer:
         self.scores_dir.mkdir(parents=True, exist_ok=True)
 
         # Input files
-        self.file_dir = (
-            self.sim_folder_dir / "results_concat" / f"combined_{file_to_examine}.csv"
-        )
+        self.file_dir = self.sim_folder_dir / "results_concat" / f"combined_{file_to_examine}.csv"
         self.benchmark_dir = base / "simulations" / "benchmark" / f"{file_to_examine}.csv"
 
         # Load and prepare data
@@ -33,6 +30,7 @@ class ResultAnalyzer:
 
     def _read_data(self):
         """Read benchmark and hindcast data, ensure UTC timestamps."""
+
         def _load(path):
             df = pd.read_csv(path, index_col=0, parse_dates=True)
             return df.tz_localize("UTC") if df.index.tz is None else df.tz_convert("UTC")
@@ -40,7 +38,6 @@ class ResultAnalyzer:
         self.df_benchmark_raw = _load(self.benchmark_dir)
         self.df_raw = _load(self.file_dir)
 
-                
     def _filter_years(self):
         """Filter both dataframes to the years and align indices."""
         years = self.weather_years_list
@@ -60,12 +57,8 @@ class ResultAnalyzer:
 
     def _get_common_columns(self):
         """Find intersection of countries."""
-        self.common_cols = sorted(
-            set(self.df_benchmark.columns).intersection(self.df.columns)
-        )
-        self.logger.info(
-            f"Found {len(self.common_cols)} common countries: {self.common_cols}"
-        )
+        self.common_cols = sorted(set(self.df_benchmark.columns).intersection(self.df.columns))
+        self.logger.info(f"Found {len(self.common_cols)} common countries: {self.common_cols}")
 
     def compute_scores_by_year(self):
         """
@@ -106,10 +99,8 @@ class ResultAnalyzer:
         plt.style.use("seaborn-v0_8-whitegrid")
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        ax.plot(self.df_benchmark.index, self.df_benchmark[country],
-                label="Benchmark", color="tab:blue")
-        ax.plot(self.df.index, self.df[country],
-                label="Dynamic", color="#ff7f0e")
+        ax.plot(self.df_benchmark.index, self.df_benchmark[country], label="Benchmark", color="tab:blue")
+        ax.plot(self.df.index, self.df[country], label="Dynamic", color="#ff7f0e")
 
         ax.legend()
         ax.set_title(f"{country} – Electricity Prices (EUR/MWh)")
