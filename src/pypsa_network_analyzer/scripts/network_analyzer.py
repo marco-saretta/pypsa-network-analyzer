@@ -10,49 +10,68 @@ import logging
 
 class NetworkAnalyzer:
     """
-    A class to analyze CO₂ emissions and generation dispatch from a PyPSA network.
+    A class to analyze main figures from a PyPSA network file
     """
 
-    def __init__(self, 
-                 config: DictConfig, 
-                 simulation: str, 
-                 weather_year: str, 
-                 logger: Optional[logging.Logger]):
-        
+    def __init__(self, config: DictConfig, network_file: str, logger: Optional[logging.Logger]):
         self.logger = logger
         self.config = config
-        self.simulation = simulation
-        self.weather_year = weather_year
+        self.network_file = network_file
 
         self._plot_settings()
-        self._set_directories(simulation, weather_year)
+        self._set_directories(network_file)
         self._get_network_components()
         self.gen_t_bus, self.gen_filtered_t_bus = self.compute_dispatch()
 
-    def _set_directories(self, simulation: str, weather_year: str):
+    def _set_directories(self, network_file: str):
         """Configure key directories using pathlib."""
 
-        # Set file and root directory
-        self.file_dir = Path(__file__).resolve()
+        # Set root and file directories
+        self.file_dir = Path(__file__).resolve().parent
         self.root_dir = Path(self.config.paths.root)
+        self.network_file_path = Path(network_file)
 
+        # Set input data directory
+        self.data_dir = self.root_dir / "data"
+        network_files_data_dir = self.data_dir / "network_files"
+        self.network_file_dir = network_files_data_dir / self.network_file_path
+
+        # Check if network file exists
+        if not self.network_file_dir.exists():
+            msg = (
+                f"Network file {self.network_file_dir} does not exist in data folder"
+            )
+            self.logger.error(f"Network file {self.network_file_dir} does not exist in data folder"
+            )
+            raise FileNotFoundError(msg)
+
+        if self.network_file_dir.suffix != ".nc":
+            msg = (
+                f"Invalid network file extension: "
+                f"{self.network_file_dir.suffix}. Expected .nc"
+            )
+            self.logger.error(msg)
+            raise ValueError(msg)
+
+        # Directories creation
         self.results_dir = self.root_dir / "results"
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
-        self.sim_dir = self.results_dir / simulation
-        self.res_concat_dir = self.sim_dir / "results_concat"
+        network_stem = self.network_file_path.stem
+        self.network_file_res_dir = self.results_dir / network_stem
+        self.network_file_res_dir.mkdir(parents=True, exist_ok=True)
+
+        self.res_concat_dir = self.root_dir / "results_concat"
         self.res_concat_dir.mkdir(parents=True, exist_ok=True)
 
-        self.network_file_name = Path(simulation + ".nc")
-        self.network_file_dir = self.root_dir / "data" / "network_files" / self.network_file_name
+        self.logger.info(f"Directories configured for network: {network_stem}")
 
-        self.weather_year_dir = self.sim_dir / str(weather_year)
-        self.weather_year_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_network_components(self) -> None:
         # Load the PyPSA network
         self.n = pypsa.Network(self.network_file_dir)
         self.logger.info("Correctly read network file")
+        
         # Extract buses from network file
         self.buses = self.n.generators.bus.unique()
 
@@ -66,7 +85,7 @@ class NetworkAnalyzer:
         carriers = carriers[~carriers.color.isna()]
         carriers = carriers[carriers.color != ""]
         self.n.carriers = carriers
-        
+
     def _save_plot(self, fig, filename: str, bus: str = "") -> None:
         """
         Save a matplotlib figure in the plot directory.
@@ -80,12 +99,13 @@ class NetworkAnalyzer:
         bus : str, optional
             Subfolder per bus if specified.
         """
-        folder = self.sim_res_dir / bus if bus else self.sim_res_dir
+        folder = self.network_file_res_dir / bus if bus else self.network_file_res_dir
         folder.mkdir(parents=True, exist_ok=True)
-        filepath = folder / f"{filename}.{self.file_format}"
-        fig.savefig(filepath, dpi=150, bbox_inches="tight")
+        
+        filepath = folder / f"{filename}.{self.config.plot_export_format}"
+        fig.savefig(filepath, bbox_inches="tight")
         plt.close(fig)
-        self.logger.info(f"Saved: {filepath}")
+        self.logger.info(f"Plot saved: {filepath}")
 
     def _plot_settings(self):
         """Configure colorblind-friendly plot settings and global plot style."""
@@ -142,29 +162,20 @@ class NetworkAnalyzer:
 
         n = self.n
 
-        # ------------------------------
-        # 1) Total generator dispatch by bus
-        # ------------------------------
+        # Total generator dispatch by bus
         gen_bus = n.generators.bus
         gen_t_bus = n.generators_t.p.T.groupby(gen_bus).sum().T
 
-        # ------------------------------
-        # 2) Conventional generators
-        # ------------------------------
+        # Conventional generators
         conventional_carriers = [
             "nuclear", "oil", "OCGT", "CCGT",
             "coal", "lignite", "geothermal", "biomass"
         ]
-
-        # conventional generator selection
         gens_filtered = n.generators.index[n.generators.carrier.isin(conventional_carriers)]
         gen_bus_filtered = n.generators.bus.reindex(gens_filtered)
         gen_filtered_t_bus = n.generators_t.p.T.groupby(gen_bus_filtered).sum().T
 
-        # ------------------------------
-        # 3) Add hydro + pumped hydro from storage units
-        # ------------------------------
-        # Call hydro + PHS storage units (which are defdined as self.n.storage_units and self.phs_units
+        # Add hydro + pumped hydro from storage units
         hydro_gen_bus = self.hydro_units.bus
         phs_gen_bus = self.phs_units.bus
 
@@ -181,28 +192,29 @@ class NetworkAnalyzer:
         return gen_t_bus, gen_filtered_t_bus
       
     def extract_summary(self):
-        folder = self.sim_res_dir / "summary"
+        folder = self.network_file_res_dir / "summary"
         folder.mkdir(parents=True, exist_ok=True)
-        
+
         # Electricity prices
         self.electricity_prices_df = self.n.buses_t.marginal_price
         self.electricity_prices_df.to_csv(folder / "electricity_prices.csv")
-        
+
         # Buses
         self.buses_df = self.n.buses
         self.buses_df.to_csv(folder / "buses.csv")
-        
+
         # Electric load
         self.load_df = self.n.loads_t.p_set
         self.load_df.to_csv(folder / "electric_load.csv")
-        
+
         # Generators
-        self.generators_df = self.n.generators_t['p']  # Non-null keys --> "p_max_pu", "marginal_cost", "p"
-        self.marginal_cost_df = self.n.generators_t['marginal_cost']
+        self.generators_df = self.n.generators_t["p"]  # Non-null keys --> "p_max_pu", "marginal_cost", "p"
+        self.marginal_cost_df = self.n.generators_t["marginal_cost"]
         self.generators_df.to_csv(folder / "generators_dispatch.csv")
         self.marginal_cost_df.to_csv(folder / "generators_marginal_cost.csv")
-        self.hydro_all_df = self.n.storage_units_t['p_dispatch']
-        # concat generators_df with hydro and phs dispatch
+        self.hydro_all_df = self.n.storage_units_t["p_dispatch"]
+        
+        # Concat generators_df with hydro and phs dispatch
         self.total_dispatch = self.generators_df.add(self.hydro_all_df, fill_value=0)
         self.total_dispatch.to_csv(folder / "total_generators_dispatch_with_hydro_phs.csv")
 
@@ -211,9 +223,7 @@ class NetworkAnalyzer:
 
         self.carrier_total = pd.concat([carrier_gen, carrier_storage])
         self.total_dispatch_by_carrier = self.total_dispatch.T.groupby(self.carrier_total).sum().T
-        self.total_dispatch_by_carrier.to_csv(folder / "æ.csv")
-
-
+        self.total_dispatch_by_carrier.to_csv(folder / "total_dispatch_by_carrier.csv")
 
         # Get total capacities
         self.capacities_gen = self.n.generators.p_nom_opt
@@ -221,10 +231,12 @@ class NetworkAnalyzer:
         self.capacities = pd.concat([self.capacities_gen, self.capacities_storage])
         # Retrieve the bus for each generator and storage unit
         # Directly create aligned dataframe
-        capacities_bus = pd.DataFrame({
-            "bus": pd.concat([self.n.generators.bus, self.n.storage_units.bus]),
-            "p_nom_opt": pd.concat([self.capacities_gen, self.capacities_storage])
-        })
+        capacities_bus = pd.DataFrame(
+            {
+                "bus": pd.concat([self.n.generators.bus, self.n.storage_units.bus]),
+                "p_nom_opt": pd.concat([self.capacities_gen, self.capacities_storage]),
+            }
+        )
         # Add name generator/storage unit as index name
         capacities_bus.index.name = "generator"
         self.capacities_bus = capacities_bus
@@ -232,21 +244,18 @@ class NetworkAnalyzer:
         # Total capacities by carrier
         self.capacities_by_carrier = self.capacities.groupby(self.carrier_total).sum()
         self.capacities_by_carrier.to_csv(folder / "installed_capacities_by_carrier_MW.csv")
-       
+
         # CO2 emissions
         self.co2_gen, self.co2_bus = self.compute_emissions()
-        
+
         self.co2_gen.to_csv(folder / "co2_emissions_by_generator_t.csv")
         self.co2_bus.to_csv(folder / "co2_emissions_by_country.csv")
-        self.p_max_pu_df = self.n.generators_t['p_max_pu']
-        self.p_max_pu_df.to_csv(folder / 'p_max_pu.csv')
-        
+        self.p_max_pu_df = self.n.generators_t["p_max_pu"]
+        self.p_max_pu_df.to_csv(folder / "p_max_pu.csv")
 
-        
         # Energy mix
-        energy_mix_dict ={}
+        energy_mix_dict = {}
         for bus in self.buses:
-            
             gens_in = self.n.generators.index[self.n.generators.bus == bus]
             if len(gens_in) == 0:
                 print(f"No generators on bus: {bus}")
@@ -256,11 +265,11 @@ class NetworkAnalyzer:
             gen_sum = self.n.generators_t.p[gens_in].sum()
             gen_carriers = self.n.generators.carrier[gens_in]
             gen_sum_by_carrier = gen_sum.groupby(gen_carriers).sum()
-        
+
             energy_mix_dict[bus] = gen_sum_by_carrier
-        
+
         energy_mix_df = pd.DataFrame(energy_mix_dict).fillna(0).T
-        energy_mix_df = energy_mix_df / 1e6 # Convert to TWh
+        energy_mix_df = energy_mix_df / 1e6  # Convert to TWh
         energy_mix_df.to_csv(folder / "energy_mix_by_bus_TWh.csv")
 
     def plot_installed_capacity(self, bus):

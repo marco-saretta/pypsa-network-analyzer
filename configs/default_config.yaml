@@ -1,13 +1,64 @@
 defaults:
-  - simulations: network_files
+  - config_results_concat: config_results_concat
   - _self_
 
-weather_years:
-  - 2020
-  - 2021
-  - 2022
-  - 2023
-  - 2024
+network_files:
+# Hindcast dynamic old
+- "hindcast_dyn_old_wy2020.nc"
+- "hindcast_dyn_old_wy2021.nc"
+# - "hindcast_dyn_old_wy2022.nc"
+# - "hindcast_dyn_old_wy2023.nc"
+# - "hindcast_dyn_old_wy2024.nc"
+# # Hindcast standard old
+# - "hindcast_std_old_wy2020.nc"
+# - "hindcast_std_old_wy2021.nc"
+# - "hindcast_std_old_wy2022.nc"
+# - "hindcast_std_old_wy2023.nc"
+# - "hindcast_std_old_wy2024.nc"
+# # Hindcast dynamic
+# - "hindcast_dyn_wy2020.nc"
+# - "hindcast_dyn_wy2021.nc"
+# - "hindcast_dyn_wy2022.nc"
+# - "hindcast_dyn_wy2023.nc"
+# - "hindcast_dyn_wy2024.nc"
+# # Hindcast standard
+# - "hindcast_std_wy2020.nc"
+# - "hindcast_std_wy2021.nc"
+# - "hindcast_std_wy2022.nc"
+# - "hindcast_std_wy2023.nc"
+# - "hindcast_std_wy2024.nc"
+# # Hindcast dynamic year 2022
+# - "hindcast-dyn-2022.nc"
+# # Hindcast dynamic specific capacity
+# - "hindcast_dyn_spec_cap_wy2020.nc"
+# - "hindcast_dyn_spec_cap_wy2021.nc"
+# - "hindcast_dyn_spec_cap_wy2022.nc"
+# - "hindcast_dyn_spec_cap_wy2023.nc"
+# - "hindcast_dyn_spec_cap_wy2024.nc"
+# # Hindcast dynamic specific capacity rolling horizon
+# - "hindcast_dyn_spec_cap_rolling_wy2020.nc"
+# - "hindcast_dyn_spec_cap_rolling_wy2021.nc"
+# - "hindcast_dyn_spec_cap_rolling_wy2022.nc"
+# - "hindcast_dyn_spec_cap_rolling_wy2023.nc"
+# - "hindcast_dyn_spec_cap_rolling_wy2024.nc"
+# # Hindcast dynamic specific capacity IRENA
+# - "hindcast_dyn_spec_cap_irena_wy2020.nc"
+# - "hindcast_dyn_spec_cap_irena_wy2021.nc"
+# - "hindcast_dyn_spec_cap_irena_wy2022.nc"
+# - "hindcast_dyn_spec_cap_irena_wy2023.nc"
+# - "hindcast_dyn_spec_cap_irena_wy2024.nc"
+# # Hindcast dynamic specific capacity IRENA rolling horizon
+# - "hindcast_dyn_spec_cap_rolling_irena_wy2020.nc"
+# - "hindcast_dyn_spec_cap_rolling_irena_wy2021.nc"
+# - "hindcast_dyn_spec_cap_rolling_irena_wy2022.nc"
+# - "hindcast_dyn_spec_cap_rolling_irena_wy2023.nc"
+# - "hindcast_dyn_spec_cap_rolling_irena_wy2024.nc"
+# # Hindcast dynamic rolling horizon
+# - "hindcast_dyn_rolling_wy2020.nc"
+# - "hindcast_dyn_rolling_wy2021.nc"
+# - "hindcast_dyn_rolling_wy2022.nc"
+# - "hindcast_dyn_rolling_wy2023.nc"
+# - "hindcast_dyn_rolling_wy2024.nc"
 
 paths:
   root: "${hydra:runtime.cwd}"
@@ -19,12 +70,6 @@ api_key: YOUR-ENTSOE-API-KEY
 plot_export_format: "pdf"
 exclude_countries:
   - 'MK'  # Add problematic countries here
-
-# Processing phases (toggle on/off)
-phases:
-  analyze_networks: true
-  merge_dataframes: true
-  compute_scores: true
 
 # Metrics to compute
 metrics:

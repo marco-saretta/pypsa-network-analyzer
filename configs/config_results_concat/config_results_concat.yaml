@@ -1,0 +1,65 @@
+hindcast_dyn_old:
+- "hindcast_dyn_old_wy2020.nc"
+- "hindcast_dyn_old_wy2021.nc"
+- "hindcast_dyn_old_wy2022.nc"
+- "hindcast_dyn_old_wy2023.nc"
+- "hindcast_dyn_old_wy2024.nc"
+
+hindcast_std_old:
+- "hindcast_std_old_wy2020.nc"
+- "hindcast_std_old_wy2021.nc"
+- "hindcast_std_old_wy2022.nc"
+- "hindcast_std_old_wy2023.nc"
+- "hindcast_std_old_wy2024.nc"
+
+hindcast_dyn:
+- "hindcast_dyn_wy2020.nc"
+- "hindcast_dyn_wy2021.nc"
+- "hindcast_dyn_wy2022.nc"
+- "hindcast_dyn_wy2023.nc"
+- "hindcast_dyn_wy2024.nc"
+
+hindcast_std:
+- "hindcast_std_wy2020.nc"
+- "hindcast_std_wy2021.nc"
+- "hindcast_std_wy2022.nc"
+- "hindcast_std_wy2023.nc"
+- "hindcast_std_wy2024.nc"
+
+hindcast_std_2022:
+- "hindcast-dyn-2022.nc"
+
+hindcast_dyn_spec_cap_wy2020:
+- "hindcast_dyn_spec_cap_wy2020.nc"
+- "hindcast_dyn_spec_cap_wy2021.nc"
+- "hindcast_dyn_spec_cap_wy2022.nc"
+- "hindcast_dyn_spec_cap_wy2023.nc"
+- "hindcast_dyn_spec_cap_wy2024.nc"
+
+hindcast_dyn_spec_cap_rolling:
+- "hindcast_dyn_spec_cap_rolling_wy2020.nc"
+- "hindcast_dyn_spec_cap_rolling_wy2021.nc"
+- "hindcast_dyn_spec_cap_rolling_wy2022.nc"
+- "hindcast_dyn_spec_cap_rolling_wy2023.nc"
+- "hindcast_dyn_spec_cap_rolling_wy2024.nc"
+
+hindcast_dyn_spec_cap_irena:
+- "hindcast_dyn_spec_cap_irena_wy2020.nc"
+- "hindcast_dyn_spec_cap_irena_wy2021.nc"
+- "hindcast_dyn_spec_cap_irena_wy2022.nc"
+- "hindcast_dyn_spec_cap_irena_wy2023.nc"
+- "hindcast_dyn_spec_cap_irena_wy2024.nc"
+
+hindcast_dyn_spec_cap_rolling_irena:
+- "hindcast_dyn_spec_cap_rolling_irena_wy2020.nc"
+- "hindcast_dyn_spec_cap_rolling_irena_wy2021.nc"
+- "hindcast_dyn_spec_cap_rolling_irena_wy2022.nc"
+- "hindcast_dyn_spec_cap_rolling_irena_wy2023.nc"
+- "hindcast_dyn_spec_cap_rolling_irena_wy2024.nc"
+
+hindcast_dyn_rolling:
+- "hindcast_dyn_rolling_wy2020.nc"
+- "hindcast_dyn_rolling_wy2021.nc"
+- "hindcast_dyn_rolling_wy2022.nc"
+- "hindcast_dyn_rolling_wy2023.nc"
+- "hindcast_dyn_rolling_wy2024.nc"

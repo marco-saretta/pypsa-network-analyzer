@@ -1,6 +1,7 @@
 # General
 docs/site/
 data/network_files/*
+results/*
 
 # Hydra
 outputs/*

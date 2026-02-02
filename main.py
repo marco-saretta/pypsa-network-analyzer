@@ -13,26 +13,24 @@ log = setup_logger()
 def main(cfg: DictConfig) -> None:
     # Setup logger
     logger = setup_logger(log_dir=cfg.paths.log)
-    logger.info("Starting PyPSA Network Analysis Pipeline")
+    logger.info("Starting PyPSA Network Analysis")
 
-    # Iterate over simulations and weather years
-    for simulation in tqdm(cfg.simulations, desc="Simulations"):
-        for weather_year in tqdm(cfg.weather_years, desc="Weather Years", leave=False):
-            try:
-                network_analyzer = NetworkAnalyzer(
-                    config=cfg, 
-                    simulation=simulation,
-                    weather_year=weather_year,
-                    logger=logger
-                )
-                # network_analyzer.extract_summary()
-                # network_analyzer.plot_all_figures()
-                logger.info(f"Yay! Completed {simulation} | {weather_year}")
+    # Iterate over network files
+    for network_file in tqdm(cfg.network_files, desc="Simulations"):
+        try:
+            network_analyzer = NetworkAnalyzer(
+                config=cfg, 
+                network_file=network_file,
+                logger=logger
+            )
+            network_analyzer.extract_summary()
+            # network_analyzer.plot_all_figures()
+            logger.info(f"YES! Processed {network_file}")
 
-            except Exception as e:
-                logger.error(f"Ney! Error in {simulation} | {weather_year}: {e}")
-
-
+        except Exception as e:
+            logger.error(f"NOPE! Processing {network_file} returns error {e}", exc_info=True)
+            
+            
 if __name__ == "__main__":
     main()
 
