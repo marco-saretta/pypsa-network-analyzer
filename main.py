@@ -24,11 +24,12 @@ def main(cfg: DictConfig) -> None:
                 logger=logger
             )
             network_analyzer.extract_summary()
-            # network_analyzer.plot_all_figures()
+            network_analyzer.plot_all_figures()
             logger.info(f"YES! Processed {network_file}")
 
         except Exception as e:
             logger.error(f"NOPE! Processing {network_file} returns error {e}", exc_info=True)
+
             
             
 if __name__ == "__main__":
@@ -36,27 +37,6 @@ if __name__ == "__main__":
 
 
 # TODO
-
-
-#     # === PHASE 1: Network Analysis (Optional) ===
-#     # Uncomment to process network files
-#     for weather_year in weather_year_dict.keys():
-#         try:
-#             analyzer = NetworkAnalyzer(
-#                 simulation_folder=simulation,
-#                 weather_year=weather_year,
-#                 network_file=network_file,
-#                 plots_format_export=export_format,
-#                 logger=logger,
-#             )
-#             analyzer.extract_summary()
-#             analyzer.plot_all_figures()
-#             logger.info(f"Success {simulation} | {weather_year}")
-#         except Exception as e:
-#             logger.error(f"Error {simulation} | {weather_year}: {e}")
-#         finally:
-#             del analyzer
-#             gc.collect()
 
 #     # === PHASE 2: Merge DataFrames ===
 #     #  Uncomment to merge results from weather years
