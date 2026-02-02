@@ -2,6 +2,7 @@
 docs/site/
 data/network_files/*
 results/*
+results_concat/*
 
 # Hydra
 outputs/*
