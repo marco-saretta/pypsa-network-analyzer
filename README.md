@@ -60,7 +60,7 @@ The directory structure of the project looks like this:
 │   ├── benchmark
 │   └── network_files         # Place network files here
 │
-├── docs/                     # Dcoumentation
+├── docs/                     # Documentation
 │   ├── mkdocs.yml
 │   └── source/
 │       └── index.md
