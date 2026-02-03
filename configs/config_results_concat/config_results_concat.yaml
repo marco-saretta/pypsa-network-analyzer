@@ -12,12 +12,12 @@ hindcast_dyn_old:
 # - "hindcast_std_old_wy2023"
 # - "hindcast_std_old_wy2024"
 
-# hindcast_dyn:
-# - "hindcast_dyn_wy2020"
-# - "hindcast_dyn_wy2021"
-# - "hindcast_dyn_wy2022"
-# - "hindcast_dyn_wy2023"
-# - "hindcast_dyn_wy2024"
+hindcast_dyn:
+- "hindcast_dyn_wy2020"
+- "hindcast_dyn_wy2021"
+- "hindcast_dyn_wy2022"
+- "hindcast_dyn_wy2023"
+- "hindcast_dyn_wy2024"
 
 # hindcast_std:
 # - "hindcast_std_wy2020"

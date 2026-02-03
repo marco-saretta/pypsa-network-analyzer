@@ -9,18 +9,18 @@ network_files:
 - "hindcast_dyn_old_wy2022.nc"
 - "hindcast_dyn_old_wy2023.nc"
 - "hindcast_dyn_old_wy2024.nc"
-# # Hindcast standard old
+# Hindcast standard old
 # - "hindcast_std_old_wy2020.nc"
 # - "hindcast_std_old_wy2021.nc"
 # - "hindcast_std_old_wy2022.nc"
 # - "hindcast_std_old_wy2023.nc"
 # - "hindcast_std_old_wy2024.nc"
-# # Hindcast dynamic
-# - "hindcast_dyn_wy2020.nc"
-# - "hindcast_dyn_wy2021.nc"
-# - "hindcast_dyn_wy2022.nc"
-# - "hindcast_dyn_wy2023.nc"
-# - "hindcast_dyn_wy2024.nc"
+# Hindcast dynamic
+- "hindcast_dyn_wy2020.nc"
+- "hindcast_dyn_wy2021.nc"
+- "hindcast_dyn_wy2022.nc"
+- "hindcast_dyn_wy2023.nc"
+- "hindcast_dyn_wy2024.nc"
 # # Hindcast standard
 # - "hindcast_std_wy2020.nc"
 # - "hindcast_std_wy2021.nc"

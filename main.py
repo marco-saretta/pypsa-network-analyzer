@@ -17,8 +17,8 @@ def main(cfg: DictConfig) -> None:
     for network_file in tqdm(cfg.network_files, desc="Processing networks"):
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
-            #analyzer.extract_summary()
-            #analyzer.plot_all_figures()
+            # analyzer.extract_summary()
+            # analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
             logger.error(f"Failed to process {network_file}: {e}", exc_info=True)
@@ -38,32 +38,33 @@ def main(cfg: DictConfig) -> None:
             )
 
         # Compute scores
-        for benchmark_file in tqdm(cfg.benchmark_score_files, desc='Computing scores'):
+        for benchmark_file in tqdm(cfg.benchmark_score_files, desc="Computing scores"):
             score_analyzer = ScoreAnalyzer(
                 root_dir=cfg.paths.root,
                 res_concat_folder_dir=res_concat_folder_dir,
                 benchmark_file=benchmark_file,
-                years_list = cfg.years_list,
+                years_list=cfg.years_list,
                 logger=logger,
             )
+        df_mae, df_rmse, df_smape = score_analyzer.compute_scores_by_year()
 
-    #     # Compute metrics
-    #     df_mae, df_rmse, df_smape = score_analyzer.compute_scores_by_year()
-    #     # Drop any excluded countries
-    #     if cfg.exclude_countries:
-    #         df_mae = df_mae.drop(columns=exclude_countries, errors="ignore")
-    #         df_rmse = df_rmse.drop(columns=exclude_countries, errors="ignore")
-    #         df_smape = df_smape.drop(columns=exclude_countries, errors="ignore")
+        # Drop any excluded countries
+        if cfg.exclude_countries:
+            df_mae = df_mae.drop(columns=cfg.exclude_countries, errors="ignore")
+            df_rmse = df_rmse.drop(columns=cfg.exclude_countries, errors="ignore")
+            df_smape = df_smape.drop(columns=cfg.exclude_countries, errors="ignore")
 
-    #     # Save each score type
-    #     score_analyzer.save_scores(df_mae, filename="scores_mae.csv")
-    #     score_analyzer.save_scores(df_rmse, filename="scores_rmse.csv")
-    #     score_analyzer.save_scores(df_smape, filename="scores_smape.csv")
-    #     del score_analyzer
-    #     gc.collect()
+        # Save each score type
+        score_analyzer.save_scores(df_mae, filename="scores_mae.csv")
+        score_analyzer.save_scores(df_rmse, filename="scores_rmse.csv")
+        score_analyzer.save_scores(df_smape, filename="scores_smape.csv")
 
-    # logger.info(f"Completed {simulation}\n")
-    # logger.info("=== Batch Run Completed ===")
+        logger.info(f"Completed {group_name}\n")
+
+        del score_analyzer
+        gc.collect()
+
+    logger.info("=== Batch Run Completed ===")
 
 
 if __name__ == "__main__":
