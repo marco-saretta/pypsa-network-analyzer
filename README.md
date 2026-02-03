@@ -1,149 +1,207 @@
 # PyPSA Energy Crisis Hindcast -- DTU Special Course
 
-This repository contains the analysis workflow used in the DTU Special
-Course on modeling the European energy crisis with **PyPSA**. The
-project focuses on hindcasting the 2021--2024 period by collecting
-historical data, running PyPSA networks, and producing comparative
-analytics on system behavior, dispatch, prices, and emissions.
+This repository contains the analysis workflow used in the **DTU Special Course** on modeling the European energy crisis with **PyPSA**.  
+The project focuses on hindcasting the **2021–2024** period using historical data, PyPSA network files, and post-processing scripts to analyze system behavior, dispatch, prices, and CO₂ emissions.
 
-## Repository Structure
+## Quickstart
+Clone this repository by running the command:
+```bash
+git clone https://github.com/marco-saretta/pypsa-network-analyzer.git
+cd pypsa-network-analyzer
+```
 
-    data/
-        api_output/
-        capacity/
-        co2_emissions/
-        fuel_prices/
-        generation/
-        generators_list/
-        load/
-        marginal_cost/
-        networks/                <- place your PyPSA network files here
-        prices/
-        solar_pv_datasets/
-        wind_farms_datasets/
+## Environment Setup
 
-    presentation/
-        *.pptx                    <- course presentation material
+### Using `uv` (recommended)
 
-    results/
-        benchmark/
-        co2_comparison_plots/
-        hindcast_dynamic_*        <- year-specific hindcast runs
-        hindcast_standard_*       <- year-specific hindcast runs
-        scripts_output/
+`uv` reads dependencies directly from `pyproject.toml`.
 
-    scripts/
-        dataframe_merger.py
-        dispatch_compare.py
-        ENTSOE_api_raw.py
-        entsoe_api.py
-        gas_prices_retrieve.py
-        network_analyzer.py
-        plot_co2_emissions.py
-        plot_prices.py
-        result_scorer.py
-        ...
+```bash
+# Install uv (if not installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh                     # macOS / Linux
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 
-    utils/
-        ppt_comparison/
+# Create virtual environment
+uv venv
+
+# Install dependencies from pyproject.toml
+uv sync
+```
 
 
+### Using `conda`
 
+`conda` cannot create environments directly from `pyproject.toml`.
+
+```bash
+# Create and activate environment
+conda create -n pypsa-course python=3.11
+conda activate pypsa-course
+
+# Install project and dependencies
+pip install -e .
+```
+
+## Repository Structures
 
 The directory structure of the project looks like this:
-```bash
+```text
 ├── .github/                  # Github actions and dependabot
 │   ├── dependabot.yaml
 │   └── workflows/
 │       └── tests.yaml
-├── configs/                  # Configuration files
+│
+├── configs/                         # Hydra configuration files
+│   ├── default_config.yaml          # Main configuration entry point
+│   └── config_results_concat/
+│       └── config_results_concat.yaml
+│
 ├── data/                     # Data directory
-│   ├── processed
-│   └── raw
-├── dockerfiles/              # Dockerfiles
-│   ├── api.Dockerfile
-│   └── train.Dockerfile
-├── docs/                     # Documentation
+│   ├── benchmark
+│   └── network_files         # Place network files here
+│
+├── docs/                     # Dcoumentation
 │   ├── mkdocs.yml
 │   └── source/
 │       └── index.md
-├── models/                   # Trained models
-├── notebooks/                # Jupyter notebooks
-├── reports/                  # Reports
-│   └── figures/
+│                           
 ├── src/                      # Source code
-│   ├── project_name/
-│   │   ├── __init__.py
-│   │   ├── api.py
-│   │   ├── data.py
-│   │   ├── evaluate.py
-│   │   ├── models.py
-│   │   ├── train.py
-│   │   └── visualize.py
-└── tests/                    # Tests
-│   ├── __init__.py
+│   └── pypsa_network_analyzer/
+│       ├── scripts/                 # Analysis and plotting scripts
+│       ├── utils/                   # Utilities and helpers
+│       └── __init__.py
+│
+├── tests/                    # Unit tests
 │   ├── test_api.py
 │   ├── test_data.py
-│   └── test_model.py
+│   ├── test_model.py
+│   └── __init__.py
+│
 ├── .gitignore
 ├── .pre-commit-config.yaml
 ├── LICENSE
-├── pyproject.toml            # Python project file
-├── README.md                 # Project README
-└── tasks.py                  # Project tasks
+├── pyproject.toml            # Project configuration and dependencies
+├── README.md                 # This file
 ```
-
 
 ## Objective
 
-The repository is designed to **analyze PyPSA hindcast simulations**
-using pre-downloaded historical data. It supports:
+The repository is designed to **analyze PyPSA hindcast simulations** using pre-downloaded historical data and pre-built PyPSA networks.
 
--   Comparing dispatch across countries and buses\
--   Generating energy-mix breakdowns\
--   Visualizing CO₂ emissions and marginal costs\
--   Benchmarking dynamic vs. standard hindcast runs\
--   Producing diagnostic plots for prices, fuels, loads, and more
+It supports:
+
+- Comparison of dispatch across countries and buses
+- Energy-mix breakdowns by carrier
+- CO2 emissions analysis
+- Electricity price diagnostics
+- Installed capacity and generation statistics
+- Script-based, reproducible analysis (no notebooks required)
+
+## Configuration
+
+The project uses **Hydra** for configuration management.  
+The main entry point is:
+
+```text
+configs/default_config.yaml
+```
+
+### Default configuration structure
+
+```yaml
+defaults:
+  - config_results_concat: config_results_concat
+  - _self_
+
+network_files:
+  - "YOUR_NETWORK_FILE_HERE.nc"
+  - "YOUR_NETWORK_FILE_HERE_1.nc"
+  
+paths:
+  root: "${hydra:runtime.cwd}"
+  log: "./logs"
+
+api_key: YOUR-ENTSOE-API-KEY
+
+plot_export_format: "pdf"
+
+metrics:
+  - mae
+  - rmse
+  - smape
+```
+
+### Key fields
+
+- **`network_files`**  
+  List of PyPSA `.nc` files to analyze.  
+  Comment or uncomment blocks to switch between hindcast variants.
+
+- **`paths.root`**  
+  Base directory for relative paths. By default, this is the runtime working directory.
+
+- **`paths.log`**  
+  Directory for log files.
+
+- **`api_key`**  
+  Optional ENTSO-E API key. Required only for scripts that fetch live data.
+
+- **`exclude_countries`**  
+  Countries to omit from analysis due to data quality or model issues.
+
+- **`metrics`**  
+  Error metrics computed when comparing simulations.
 
 ## Workflow
 
-1.  Place your PyPSA network files inside:
+### Using `uv`
 
-``` bash
-data/networks/
+Run scripts inside the managed environment without manual activation:
+
+```bash
+uv run main.py
 ```
 
-2.  Create the environment:
+or directly:
 
-``` bash
-conda env create -f environment.yaml
+```bash
+uv run src/pypsa_network_analyzer/scripts/network_analyzer.py
+```
+
+---
+
+### Using `conda`
+
+Activate the environment first:
+
+```bash
 conda activate pypsa-course
 ```
 
-3.  Run:
+Then run:
 
-``` bash
+```bash
 python main.py
 ```
 
-4.  The pipeline generates:
+or:
 
-``` bash
-results/simulations/
+```bash
+python src/pypsa_network_analyzer/scripts/network_analyzer.py
 ```
-containing:
 
--   country-level energy mixes\
--   price and dispatch comparisons\
--   CO₂ emissions summaries\
--   diagnostic figures
+Each script is self-contained and produces figures and summaries relevant to a specific analysis task.
 
 ## Data
 
-All datasets required for hindcasting (load, generation, prices,
-capacities, emissions, etc.) are already included or preprocessed.
-External tokens (e.g., ENTSO-E) are **not included** and not required
-for running the existing workflow.
+All datasets required for the hindcast analyses  
+(load, generation, prices, capacities, emissions) are either:
+
+- already included, or
+- expected to be locally available in preprocessed form.
+
+**ENTSO-E API tokens are not included.**  
+Scripts that require live ENTSO-E access are optional and clearly separated in `utils/`.
 
 ## Presentations
 
@@ -152,12 +210,16 @@ modeling setup, data collection, and interpretation of results.
 
 ## Authors
 
-Authors of this repository are:
--  Lukas Karkossa and Marco Saretta from Technical University of Denmark,  {lalka, mcsr}@dtu.dk
--  Frederik Erhard Gullach from university of Aarhus, fegu@cowi.com.
+- **Lukas Karkossa** and **Marco Saretta**  
+  Technical University of Denmark  
+  `{lalka, mcsr}@dtu.dk`
+
+- **Frederik Erhard Gullach**  
+  Aarhus University  
+  `fegu@cowi.com`
 
 ## Template
 
-Created using [mlops_template](https://github.com/SkafteNicki/mlops_template),
+Created using [DTU_mlops_template](https://github.com/SkafteNicki/mlops_template),
 a [cookiecutter template](https://github.com/cookiecutter/cookiecutter) for getting
 started with Machine Learning Operations (MLOps).
