@@ -24,7 +24,7 @@ def merge_dataframes(
     root: Path,
     res_concat_folder: Path,
     file_concat_folder_dict: list,
-    df_to_merge: str,
+    df_to_merge_file: str,
     logger=None,
     resample_rule: Optional[str] = None,
     ) -> Optional[Path]:
@@ -43,14 +43,22 @@ def merge_dataframes(
         Path to merged file, or None if failed
     """
     root = Path(root)
-    output_path = Path(res_concat_folder) / df_to_merge / f"combined_{df_to_merge}.csv"
+    df_to_merge_suffix = Path(df_to_merge_file).suffix
+    df_to_merge = Path(df_to_merge_file).stem
+
+    if df_to_merge_suffix != ".csv":
+        msg = f"Invalid network file extension: {df_to_merge_suffix}. Expected .csv"
+        logger.error(msg)
+        raise ValueError(msg)
+    
+    output_path = Path(res_concat_folder) / df_to_merge / f"combined_{df_to_merge}{df_to_merge_suffix}"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
         df_list = []
         
         for folder_name in file_concat_folder_dict:
-            csv_path = root / "results" / folder_name / "summary" / f"{df_to_merge}.csv"
+            csv_path = root / "results" / folder_name / "summary" / f"{df_to_merge}{df_to_merge_suffix}"
             
             if not csv_path.exists():
                 if logger:

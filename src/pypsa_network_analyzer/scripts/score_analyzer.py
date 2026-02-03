@@ -8,25 +8,34 @@ from pypsa_network_analyzer.utils import smape
 class ScoreAnalyzer:
     """Compare benchmark vs hindcast electricity prices with MAE, RMSE, and SMAPE metrics."""
 
-    def __init__(self, simulation_folder, file_to_examine, weather_years_list, logger):
+    def __init__(self, 
+                 root_dir, 
+                 res_concat_folder_dir,
+                 benchmark_file,
+                 years_list: list,
+                 logger):
+        
+        self.root_dir = Path(root_dir)
+        self.res_concat_folder_dir = Path(res_concat_folder_dir)
+        self.benchmark_file_path = Path(benchmark_file)
+        self.years_list = sorted(years_list)
         self.logger = logger
-        self.weather_years_list = sorted(weather_years_list)
-        self.file_to_examine = file_to_examine
-
-        base = Path(__file__).resolve().parent.parent
-        self.sim_folder_dir = base / "simulations" / simulation_folder
-        self.scores_dir = self.sim_folder_dir / "scores"
+        
+        self.benchmark_file_suffix = self.benchmark_file_path.suffix
+        self.benchmark_file = self.benchmark_file_path.stem
+        
+        self.scores_dir = self.res_concat_folder_dir / "scores"
         self.scores_dir.mkdir(parents=True, exist_ok=True)
 
         # Input files
-        self.file_dir = self.sim_folder_dir / "results_concat" / f"combined_{file_to_examine}.csv"
-        self.benchmark_dir = base / "simulations" / "benchmark" / f"{file_to_examine}.csv"
+        self.file_dir = self.res_concat_folder_dir / self.benchmark_file / f"combined_{benchmark_file}"
+        self.benchmark_file_dir = self.root_dir / "data" / "benchmark" / self.benchmark_file_path
 
         # Load and prepare data
         self._read_data()
-        self._interpolate_na()
-        self._filter_years()
-        self._get_common_columns()
+        # self._interpolate_na()
+        # self._filter_years()
+        # self._get_common_columns()
 
     def _read_data(self):
         """Read benchmark and hindcast data, ensure UTC timestamps."""
@@ -35,12 +44,12 @@ class ScoreAnalyzer:
             df = pd.read_csv(path, index_col=0, parse_dates=True)
             return df.tz_localize("UTC") if df.index.tz is None else df.tz_convert("UTC")
 
-        self.df_benchmark_raw = _load(self.benchmark_dir)
+        self.df_benchmark_raw = _load(self.benchmark_file_dir)
         self.df_raw = _load(self.file_dir)
 
     def _filter_years(self):
         """Filter both dataframes to the years and align indices."""
-        years = self.weather_years_list
+        years = self.years_list
 
         df = self.df_raw[self.df_raw.index.year.isin(years)]
         df_bm = self.df_benchmark_raw[self.df_benchmark_raw.index.year.isin(years)]
@@ -66,7 +75,7 @@ class ScoreAnalyzer:
         Return: df_mae, df_rmse, df_smape
         """
 
-        years = self.weather_years_list
+        years = self.years_list
         countries = self.common_cols
 
         df_mae = pd.DataFrame(index=years, columns=countries, dtype=float)

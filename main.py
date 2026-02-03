@@ -25,26 +25,28 @@ def main(cfg: DictConfig) -> None:
 
     # Merge results by weather year groups
     for group_name, folder_list in tqdm(cfg.config_results_concat.items(), desc="Merging results"):
-        output_dir = Path("results_concat") / group_name
-        output_dir.mkdir(parents=True, exist_ok=True)
+        res_concat_folder_dir = Path("results_concat", group_name)
+        res_concat_folder_dir.mkdir(parents=True, exist_ok=True)
 
-        for df_name in ["electricity_prices", "generators_dispatch"]:
+        for df_name in tqdm(cfg.merge_dataframes, desc="Merging dataframes"):
             merge_dataframes(
                 root=cfg.paths.root,
-                res_concat_folder=output_dir,
+                res_concat_folder=res_concat_folder_dir,
                 file_concat_folder_dict=folder_list,
-                df_to_merge=df_name,
+                df_to_merge_file=df_name,
                 logger=logger,
             )
-            
-    # # Compute scores
-    #     score_analyzer = ScoreAnalyzer(
-    #         simulation_folder=simulation,
-    #         file_to_examine="electricity_prices",
-    #         weather_years_list=list(weather_year_dict.values()),
-    #         logger=logger,
-    #         )
-        
+
+        # Compute scores
+        for benchmark_file in tqdm(cfg.benchmark_score_files, desc='Computing scores'):
+            score_analyzer = ScoreAnalyzer(
+                root_dir=cfg.paths.root,
+                res_concat_folder_dir=res_concat_folder_dir,
+                benchmark_file=benchmark_file,
+                years_list = cfg.years_list,
+                logger=logger,
+            )
+
     #     # Compute metrics
     #     df_mae, df_rmse, df_smape = score_analyzer.compute_scores_by_year()
     #     # Drop any excluded countries
@@ -52,18 +54,17 @@ def main(cfg: DictConfig) -> None:
     #         df_mae = df_mae.drop(columns=exclude_countries, errors="ignore")
     #         df_rmse = df_rmse.drop(columns=exclude_countries, errors="ignore")
     #         df_smape = df_smape.drop(columns=exclude_countries, errors="ignore")
-            
+
     #     # Save each score type
     #     score_analyzer.save_scores(df_mae, filename="scores_mae.csv")
     #     score_analyzer.save_scores(df_rmse, filename="scores_rmse.csv")
     #     score_analyzer.save_scores(df_smape, filename="scores_smape.csv")
     #     del score_analyzer
     #     gc.collect()
-        
+
     # logger.info(f"Completed {simulation}\n")
     # logger.info("=== Batch Run Completed ===")
 
 
 if __name__ == "__main__":
     main()
-    
