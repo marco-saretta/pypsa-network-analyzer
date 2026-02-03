@@ -24,7 +24,7 @@ class ScoreAnalyzer:
         self.benchmark_file_suffix = self.benchmark_file_path.suffix
         self.benchmark_file = self.benchmark_file_path.stem
         
-        self.scores_dir = self.res_concat_folder_dir / "scores"
+        self.scores_dir = self.res_concat_folder_dir / self.benchmark_file /"scores"
         self.scores_dir.mkdir(parents=True, exist_ok=True)
 
         # Input files
@@ -33,9 +33,9 @@ class ScoreAnalyzer:
 
         # Load and prepare data
         self._read_data()
-        # self._interpolate_na()
-        # self._filter_years()
-        # self._get_common_columns()
+        self._interpolate_na()
+        self._filter_years()
+        self._get_common_columns()
 
     def _read_data(self):
         """Read benchmark and hindcast data, ensure UTC timestamps."""
