@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from typing import Optional
 from omegaconf import DictConfig
 
+
+
 import logging
 
 
@@ -949,6 +951,346 @@ class NetworkAnalyzer:
         hydro_p.sum(axis=1).plot(ax=axs[1], title="Hydro Reservoir Daily avg Power", color=self.nature_bluish_green)
         self._save_plot(fig, f"{bus}_hydro_power", bus=bus)
 
+    def plot_EUR_total_generation_function_monthly(self):
+        #print("Running EUR_total_generation_function_monthly...")
+        n = self.n
+        # --------------------------------------------------
+        # Load hourly generation data
+        # --------------------------------------------------
+
+        # Load external generation data for this bus
+        folder = (
+                self.root_dir / "data" / "generation" / "generation_hourly_data"
+        )
+
+        folder_plot = self.network_file_res_dir / "summary"
+        
+        dfs = {}
+        dfs_comb = []
+        
+        for filename in os.listdir(folder):
+            if filename.startswith("generation_") and filename.endswith("_hourly_data.csv"):
+                key = filename.removeprefix("generation_").removesuffix("_hourly_data.csv")
+        
+                # Skip if name contains "_"
+                if "_" in key:
+                    continue
+        
+                file_path = folder / filename
+                df = pd.read_csv(file_path, index_col=0)
+                df.index = pd.to_datetime(df.index, utc=None)
+                df.index = df.index.tz_convert(None)
+                df = df.loc[df.index.intersection(n.snapshots)]
+                dfs[key] = df
+                dfs_comb.append(df)
+                
+        # --------------------------------------------------
+        # Find Hydro Pumped Storage column per dataframe
+        # --------------------------------------------------
+        
+        rows = []
+        
+        for key, df in dfs.items():
+            matches = [
+                col for col in df.columns
+                if "hydro pumped storage" in col.lower()
+            ]
+        
+            if matches:
+                rows.append({
+                    "key": key,
+                    "hydro_column_name": matches[0]
+                })
+        
+        # key as index is important
+        hydro_map = pd.DataFrame(rows).set_index("key")
+        
+        # --- Load ENTSOE data ---
+        generator_dispatch_entsoe_combine = pd.concat(dfs_comb).groupby(level=0).sum()
+        generator_dispatch_entsoe_combine.index.name = "time"
+        
+        
+        # Step 1: remove columns containing 'Actual Consumption'
+        df = generator_dispatch_entsoe_combine.loc[
+            :, ~generator_dispatch_entsoe_combine.columns.astype(str).str.contains("Actual Consumption")
+        ]
+        
+        # Step 2: clean columns containing 'Actual Aggregated' - new name
+        new_cols = []
+        for c in df.columns:
+            c_str = str(c)
+            if "Actual Aggregated" in c_str:
+                # extract text between the first pair of single quotes
+                import re
+                match = re.search(r"'([^']+)'", c_str)
+                if match:
+                    new_cols.append(match.group(1))
+                else:
+                    new_cols.append(c_str)
+            else:
+                new_cols.append(c)
+        
+        df.columns = new_cols
+        
+        # Step 3: sum columns with the same name
+        #df = df.groupby(level=0, axis=1).sum()
+        df = df.T.groupby(level=0).sum().T
+        
+        generator_dispatch_entsoe_combine = df
+        
+            
+        # Extract hydro and pumped hydro storage units
+        hydro_units = n.storage_units[n.storage_units['carrier'] == 'hydro']
+        phs_units = n.storage_units[n.storage_units['carrier'] == 'PHS']  
+        pypsa_gen = n.generators_t.p
+        # Add storage unit discharges (hydro + PHS) to generation dispatch
+        hydro_dispatch = n.storage_units_t.p_dispatch[hydro_units.index]
+        phs_net = n.storage_units_t.p[phs_units.index]
+        pypsa_gen = pypsa_gen.join(hydro_dispatch).join(phs_net)
+        pypsa_gen.fillna(0, inplace=True)
+        
+        technologies = pypsa_gen.columns.str.split(" ", n=1).str[1]
+        valid_cols = technologies.notna()
+        #pypsa_gen_sum = (
+        #    pypsa_gen.loc[:, valid_cols].groupby(technologies[valid_cols], axis=1).sum()
+        #)
+        pypsa_gen_sum = pypsa_gen.loc[:, valid_cols].T.groupby(technologies[valid_cols]).sum().T
+        
+        # --- Mapping ---
+        
+        mapping = {
+            "0 offwind-ac": "Wind Offshore",
+            "0 offwind-dc": "Wind Offshore",
+            "0 onwind": "Wind Onshore",
+            "0 solar": "Solar",
+            "0 solar-hsat": "Solar",
+            "CCGT": "Fossil Gas",
+            "OCGT": "Fossil Gas",
+            #"PHS": "Hydro Pumped Storage Net",         Remove this and add it later
+            "biomass": "Biomass",
+            "coal": "Fossil Hard coal",
+            "geothermal": "Geothermal",
+            "hydro": "Hydro Run-of-river and poundage",
+            "lignite": "Fossil Brown coal/Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Fossil Oil",
+            "ror": "Hydro Run-of-river and poundage",
+        }
+        
+        mapped = pypsa_gen_sum.columns.map(mapping)
+        keep_mask = mapped.notna()
+        df_kept = pypsa_gen_sum.loc[:, keep_mask]
+        df_kept.columns = mapped[keep_mask].values
+        #pypsa_gen_sum = df_kept.groupby(df_kept.columns, axis=1).sum()
+        pypsa_gen_sum = df_kept.T.groupby(df_kept.columns).sum().T
+        
+        # Filter ENTSOE columns to keep only common tech
+        common_tech_cols = pypsa_gen_sum.columns.intersection(generator_dispatch_entsoe_combine.columns)
+        generator_dispatch_entsoe_combine = generator_dispatch_entsoe_combine.loc[:, common_tech_cols]
+        generator_dispatch_pypsa_sum = pypsa_gen_sum
+        # --------------------------------------------------
+        # Initialize results container
+        # --------------------------------------------------
+        results_collected = {}
+        # --------------------------------------------------
+        # Select only PHS columns, single-column per key - this is net, as it has both positive and negative values
+        # --------------------------------------------------
+        phs = n.storage_units_t.p.loc[:, n.storage_units_t.p.columns.str.contains("PHS")]  # This is net, as it has both positive and negative values
+        phs.columns = [col.split(" ", 1)[0] for col in phs.columns]
+
+        phs_dispatch = n.storage_units_t.p_dispatch.loc[
+            :, n.storage_units_t.p_dispatch.columns.str.contains("PHS")  # This is only dispatch
+        ]
+        phs_dispatch.columns = [col.split(" ", 1)[0] for col in phs_dispatch.columns]
+
+        year = n.snapshots.year[0]
+
+        results = {}  # dict, not list
+        # --------------------------------------------------
+        # Loop over hydro_map keys
+        # --------------------------------------------------
+        for key, row in hydro_map.iterrows():
+            col = row["hydro_column_name"]
+            df = dfs[key]
+
+            # ----------------------------
+            # Case 1: exact string column
+            # ----------------------------
+            if col == "Hydro Pumped Storage Net":
+                entso_e_PHS = df[col]
+                entso_e_PHS_series = entso_e_PHS.clip(lower=0)
+                #gen_dis_entso_e = generator_dispatch_entsoe_combine # No change
+                
+                pypsa_PHS = phs[key]
+                pypsa_PHS_series= pypsa_PHS.clip(lower=0)
+
+            # ----------------------------
+            # Case 2: exact MultiIndex column
+            # ----------------------------
+            elif col == ("Hydro Pumped Storage", "Actual Aggregated"):
+                gen = df[col]
+                cons = df[("Hydro Pumped Storage", "Actual Consumption")]
+                entso_e_PHS = gen - cons
+                entso_e_PHS_series = entso_e_PHS.clip(lower=0)
+                #value = net_val.clip(lower=0).sum()
+
+                pypsa_PHS = phs[key]
+                pypsa_PHS_series= pypsa_PHS.clip(lower=0)
+                #pypsa_value = pypsa_series.clip(lower=0).sum()
+
+            # ----------------------------
+            # Default case
+            # ----------------------------
+            else:
+                entso_e_PHS_series = df[col]
+                #value = period_data.clip(lower=0).sum()
+
+                pypsa_PHS_series = phs_dispatch[key]
+                #pypsa_value = pypsa_series.sum()  # sum negatives as needed
+        
+            # ----------------------------
+            # Append results
+            # ----------------------------
+            results[key] = {
+            "entso_e_PHS_series": entso_e_PHS_series,
+            "pypsa_PHS_series": pypsa_PHS_series
+        }
+            
+        # Sum all ENTSO-E PHS across countries.
+        total_entso_e_PHS = pd.concat([v["entso_e_PHS_series"] for v in results.values()]).groupby(level=0).sum()
+
+        # Sum all PyPSA PHS across countries.
+        total_pypsa_PHS = pd.concat([v["pypsa_PHS_series"] for v in results.values()]).groupby(level=0).sum()
+        
+        generator_dispatch_entsoe_combine["Hydro Storage"] = total_entso_e_PHS
+        generator_dispatch_pypsa_sum["Hydro Storage"] = total_pypsa_PHS
+
+        #GWh
+        generator_dispatch_entsoe_combine_monthly=generator_dispatch_entsoe_combine.resample('ME').mean()/1e3
+        generator_dispatch_pypsa_sum_monthly = generator_dispatch_pypsa_sum.resample('ME').mean()/1e3
+
+
+        color_dict = n.carriers["color"].to_dict()
+        
+        mapping_color = {
+            "offwind-ac": "Wind Offshore",
+            "offwind-dc": "Wind Offshore",
+            "onwind": "Wind Onshore",
+            "solar": "Solar",
+            "solar-hsat": "Solar",
+            "CCGT": "Fossil Gas",
+            "OCGT": "Fossil Gas",
+            "PHS": "Hydro Storage",        
+            "biomass": "Biomass",
+            "coal": "Fossil Hard coal",
+            "geothermal": "Geothermal",
+            "hydro": "Hydro Run-of-river and poundage",
+            "lignite": "Fossil Brown coal/Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Fossil Oil",
+            "ror": "Hydro Run-of-river and poundage",
+        }
+        
+        color_dict_new = {}
+
+        for original_name, new_name in mapping_color.items():
+            # Use the color from the original carrier
+            if original_name in color_dict:
+                color_dict_new[new_name] = color_dict[original_name]
+
+
+        ax = generator_dispatch_pypsa_sum_monthly.plot.area(
+            linewidth=0.01,
+            color=color_dict_new,
+            title=f'Generator dispatch EUR aggregated PyPSA {n.snapshots.year[0]}',
+            ylabel='Monthly dispatch [GWh]',
+            ylim = [0,450],
+            figsize=(12,6)
+        )
+
+        # Move legend below the plot
+        ax.legend(
+            loc='upper center',        # center horizontally
+            bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+            ncol=4,                    # number of columns in legend
+            fontsize=10,
+        )
+        
+        plt.tight_layout()  # prevent clipping
+        plt.savefig(folder_plot / "generator_dispatch_pypsa_monthly.pdf")
+        
+
+        
+        ax = generator_dispatch_entsoe_combine_monthly.plot.area(
+            linewidth=0.01,
+            color=color_dict_new,
+            title=f'Generator dispatch EUR aggregated Entso-E {n.snapshots.year[0]}',
+            ylabel='Monthly dispatch [GWh]',
+            ylim = [0,450],
+            figsize=(12,6)
+        )
+
+        # Move legend below the plot
+        ax.legend(
+            loc='upper center',        # center horizontally
+            bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+            ncol=4,                    # number of columns in legend
+            fontsize=10
+        )
+        
+        plt.tight_layout()  # prevent clipping
+        plt.savefig(folder_plot / "generator_dispatch_entso_e_monthly.pdf")
+        
+        
+        """ Plot for percentage share """
+        generator_dispatch_entsoe_combine_percent = generator_dispatch_entsoe_combine.div(generator_dispatch_entsoe_combine.sum(axis=1), axis=0) * 100
+        generator_dispatch_pypsa_sum_percent = generator_dispatch_pypsa_sum.div(generator_dispatch_pypsa_sum.sum(axis=1), axis=0) * 100
+        generator_dispatch_entsoe_combine_percent_monthly = generator_dispatch_entsoe_combine_percent.resample('ME').mean()
+        generator_dispatch_pypsa_sum_percent_monthly = generator_dispatch_pypsa_sum_percent.resample('ME').mean()
+
+
+        ax = generator_dispatch_pypsa_sum_percent_monthly.plot.area(
+            linewidth=0.01,
+            color=color_dict_new,
+            title=f'Generator dispatch EUR aggregated PyPSA {n.snapshots.year[0]}',
+            ylabel='Monthly dispatch share [%]',
+            ylim = [0,100],
+            figsize=(12,6)
+        )
+
+        # Move legend below the plot
+        ax.legend(
+            loc='upper center',        # center horizontally
+            bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+            ncol=4,                    # number of columns in legend
+            fontsize=10,
+        )
+
+        plt.tight_layout()  # prevent clipping
+        plt.savefig(folder_plot / "generator_dispatch_pypsa_percentage_monthly.pdf")
+
+
+        ax = generator_dispatch_entsoe_combine_percent_monthly.plot.area(
+            linewidth=0.01,
+            color=color_dict_new,
+            title=f'Generator dispatch EUR aggregated Entso-E {n.snapshots.year[0]}',
+            ylabel='Monthly dispatch share [%]',
+            ylim = [0,100],
+            figsize=(12,6)
+        )
+
+        # Move legend below the plot
+        ax.legend(
+            loc='upper center',        # center horizontally
+            bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+            ncol=4,                    # number of columns in legend
+            fontsize=10
+        )
+
+        plt.tight_layout()  # prevent clipping
+        plt.savefig(folder_plot / "generator_dispatch_entso_e_percentage_monthly.pdf")
+        
+    
     def plot_all_figures(self):
         """Generate and save standard analysis plots per bus."""
 
@@ -969,3 +1311,7 @@ class NetworkAnalyzer:
             self.plot_hydro_analysis(bus)  # Plot hydro analysis
             # self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
             self.plot_total_dispatch_all_buses()
+        self.plot_EUR_total_generation_function_monthly()
+
+       
+        
