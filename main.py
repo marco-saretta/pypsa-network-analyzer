@@ -18,7 +18,7 @@ def main(cfg: DictConfig) -> None:
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
             analyzer.extract_summary()
-            analyzer.plot_all_figures()
+            #analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
             logger.error(f"Failed to process {network_file}: {e}", exc_info=True)
