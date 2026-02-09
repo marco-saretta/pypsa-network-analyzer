@@ -1,6 +1,6 @@
 # General
 docs/site/
-data/network_files/*
+data/*
 results/*
 results_concat/*
 
