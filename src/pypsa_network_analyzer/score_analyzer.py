@@ -8,23 +8,17 @@ from pypsa_network_analyzer.utils import smape
 class ScoreAnalyzer:
     """Compare benchmark vs hindcast electricity prices with MAE, RMSE, and SMAPE metrics."""
 
-    def __init__(self, 
-                 root_dir, 
-                 res_concat_folder_dir,
-                 benchmark_file,
-                 years_list: list,
-                 logger):
-        
+    def __init__(self, root_dir, res_concat_folder_dir, benchmark_file, years_list: list, logger):
         self.root_dir = Path(root_dir)
         self.res_concat_folder_dir = Path(res_concat_folder_dir)
         self.benchmark_file_path = Path(benchmark_file)
         self.years_list = sorted(years_list)
         self.logger = logger
-        
+
         self.benchmark_file_suffix = self.benchmark_file_path.suffix
         self.benchmark_file = self.benchmark_file_path.stem
-        
-        self.scores_dir = self.res_concat_folder_dir / self.benchmark_file /"scores"
+
+        self.scores_dir = self.res_concat_folder_dir / self.benchmark_file / "scores"
         self.scores_dir.mkdir(parents=True, exist_ok=True)
 
         # Input files

@@ -3,7 +3,8 @@ docs/site/
 data/*
 results/*
 results_concat/*
-#figures_paper/*
+figures_paper/*
+notebooks/*
 
 # Hydra
 outputs/*
