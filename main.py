@@ -4,8 +4,9 @@ from tqdm import tqdm
 from pathlib import Path
 import gc
 
-from pypsa_network_analyzer import NetworkAnalyzer, ScoreAnalyzer
-from pypsa_network_analyzer import setup_logger, merge_dataframes
+from pypsa_network_analyzer.network_analyzer import NetworkAnalyzer
+from pypsa_network_analyzer.score_analyzer import ScoreAnalyzer
+from pypsa_network_analyzer.utils import setup_logger, merge_dataframes
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="default_config")
@@ -18,7 +19,7 @@ def main(cfg: DictConfig) -> None:
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
             analyzer.extract_summary()
-            #analyzer.plot_all_figures()
+            # analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
             logger.error(f"Failed to process {network_file}: {e}", exc_info=True)

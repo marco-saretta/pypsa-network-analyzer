@@ -1,16 +1,9 @@
-hindcast-dyn-dispatch:
-- "hindcast-dyn-dispatch-wy2020"
-- "hindcast-dyn-dispatch-wy2021"
-- "hindcast-dyn-dispatch-wy2022"
-- "hindcast-dyn-dispatch-wy2023"
-- "hindcast-dyn-dispatch-wy2024"
-
-hindcast-dyn-rolling-dispatch:
-- "hindcast-dyn-rolling-dispatch-wy2020"
-- "hindcast-dyn-rolling-dispatch-wy2021"
-- "hindcast-dyn-rolling-dispatch-wy2022"
-- "hindcast-dyn-rolling-dispatch-wy2023"
-- "hindcast-dyn-rolling-dispatch-wy2024"
+hindcast-std:
+- "hindcast-std-wy2020"
+- "hindcast-std-wy2021"
+- "hindcast-std-wy2022"
+- "hindcast-std-wy2023"
+- "hindcast-std-wy2024"
 
 hindcast-dyn-rolling:
 - "hindcast-dyn-rolling-wy2020"
@@ -25,17 +18,3 @@ hindcast-dyn:
 - "hindcast-dyn-wy2022"
 - "hindcast-dyn-wy2023"
 - "hindcast-dyn-wy2024"
-
-hindcast-std-dispatch:
-- "hindcast-std-dispatch-wy2020"
-- "hindcast-std-dispatch-wy2021"
-- "hindcast-std-dispatch-wy2022"
-- "hindcast-std-dispatch-wy2023"
-- "hindcast-std-dispatch-wy2024"
-
-hindcast-std:
-- "hindcast-std-wy2020"
-- "hindcast-std-wy2021"
-- "hindcast-std-wy2022"
-- "hindcast-std-wy2023"
-- "hindcast-std-wy2024"
