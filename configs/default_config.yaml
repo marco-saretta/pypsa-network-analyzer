@@ -3,18 +3,12 @@ defaults:
   - _self_
 
 network_files:
-# hindcast-dyn-dispatch:
-- "hindcast-dyn-dispatch-wy2020.nc"
-- "hindcast-dyn-dispatch-wy2021.nc"
-- "hindcast-dyn-dispatch-wy2022.nc"
-- "hindcast-dyn-dispatch-wy2023.nc"
-- "hindcast-dyn-dispatch-wy2024.nc"
-# hindcast-dyn-rolling-dispatch:
-- "hindcast-dyn-rolling-dispatch-wy2020.nc"
-- "hindcast-dyn-rolling-dispatch-wy2021.nc"
-- "hindcast-dyn-rolling-dispatch-wy2022.nc"
-- "hindcast-dyn-rolling-dispatch-wy2023.nc"
-- "hindcast-dyn-rolling-dispatch-wy2024.nc"
+# hindcast-std:
+- "hindcast-std-wy2020.nc"
+- "hindcast-std-wy2021.nc"
+- "hindcast-std-wy2022.nc"
+- "hindcast-std-wy2023.nc"
+- "hindcast-std-wy2024.nc"
 # hindcast-dyn-rolling:
 - "hindcast-dyn-rolling-wy2020.nc"
 - "hindcast-dyn-rolling-wy2021.nc"
@@ -27,18 +21,6 @@ network_files:
 - "hindcast-dyn-wy2022.nc"
 - "hindcast-dyn-wy2023.nc"
 - "hindcast-dyn-wy2024.nc"
-# hindcast-std-dispatch:
-- "hindcast-std-dispatch-wy2020.nc"
-- "hindcast-std-dispatch-wy2021.nc"
-- "hindcast-std-dispatch-wy2022.nc"
-- "hindcast-std-dispatch-wy2023.nc"
-- "hindcast-std-dispatch-wy2024.nc"
-# hindcast-std:
-- "hindcast-std-wy2020.nc"
-- "hindcast-std-wy2021.nc"
-- "hindcast-std-wy2022.nc"
-- "hindcast-std-wy2023.nc"
-- "hindcast-std-wy2024.nc"
 
 paths:
   root: "${hydra:runtime.cwd}"
