@@ -21,9 +21,13 @@ class ResultsPlotter:
         self.sim_labels = list(cfg.config_results_concat.keys())
         self.error_list = ["mae", "rmse", "smape"]
         self.benchmark = "electricity_prices"
+        self.export_format = cfg.plot_export_format
 
         # Define units for each error metric
         self.error_units = {"mae": "EUR/MWh", "rmse": "EUR/MWh", "smape": "%"}
+
+        # Load data
+        self.load_data()
 
         # Set seaborn style
         sns.set_theme(
@@ -48,13 +52,14 @@ class ResultsPlotter:
                 df = pd.read_csv(file_path, index_col=0)
                 self.scores_dict[sim_label][error] = df
 
-    def plot_mae_by_simulation_and_year(self):
+    def plot_error_by_simulation_and_year(self, error_metric):
         """Create boxplot showing MAE by simulation and year."""
+        error_metric = error_metric
         records = []
 
         # Loop over simulation groups
         for sim_name in self.sim_labels:
-            csv_path = self.results_root / sim_name / self.benchmark / "scores" / "scores_mae.csv"
+            csv_path = self.results_root / sim_name / self.benchmark / "scores" / f"scores_{error_metric}.csv"
 
             if not csv_path.exists():
                 raise FileNotFoundError(f"Missing file: {csv_path}")
@@ -66,7 +71,7 @@ class ResultsPlotter:
             df_long = df.reset_index(names="year").melt(
                 id_vars="year",
                 var_name="country",
-                value_name="mae",
+                value_name=error_metric,
             )
 
             df_long["simulation"] = sim_name
@@ -85,33 +90,30 @@ class ResultsPlotter:
         sns.boxplot(
             data=long_df,
             x="simulation",
-            y="mae",
+            y=error_metric,
             hue="year",
             hue_order=year_order,
-            palette="Set2",
             width=0.7,
             linewidth=1.1,
             showfliers=False,
         )
 
-        plt.ylabel("MAE (EUR/MWh)")
+        #plt.ylabel("MAE (EUR/MWh)")
         plt.xlabel("")
-        plt.xticks(rotation=30, ha="right")
+        plt.xticks(rotation=0, ha="center")
         plt.grid(axis="y", alpha=0.3)
 
         plt.legend(title="Year", frameon=False)
         plt.tight_layout()
 
-        output_path = self.figures_dir / "mae_by_simulation_and_year.pdf"
+        output_path = self.figures_dir / f"{error_metric}_by_simulation_and_year.{self.export_format}"
         plt.savefig(output_path)
         plt.close()
         print(f"Saved: {output_path}")
 
-    def plot_boxplot_per_country(self):
+    def plot_boxplot_per_country(self, x_length=8):
         """Create grid of boxplots showing error distributions per country."""
-        scores_dict = self.load_data()
 
-        x_length = 8
         phi = 1.618
         fig, axes = plt.subplots(
             nrows=len(self.sim_labels),
@@ -119,13 +121,13 @@ class ResultsPlotter:
             figsize=(x_length, x_length * phi),
             sharex="col",
         )
-        
+
         # Define maximum values for x-axis
         x_max_values = {"mae": 250, "rmse": 300, "smape": 150}
 
         for i, sim_label in enumerate(self.sim_labels):
             for j, error in enumerate(self.error_list):
-                df = scores_dict[sim_label][error]
+                df = self.scores_dict[sim_label][error]
 
                 df_long = df.reset_index(names="year").melt(
                     id_vars="year",
@@ -152,17 +154,16 @@ class ResultsPlotter:
 
                 # Add column titles on top row
                 if i == 0:
-                    ax.set_title(f"{error.upper()} ({self.error_units[error]})", fontsize=11, fontweight="bold", pad=10)
+                    ax.set_title(f"{error.upper()} ({self.error_units[error]})", fontsize=11, pad=10)
 
                 # Add row labels on the left
                 if j == 0:
                     ax.text(
-                        -0.35,
+                        -0.25,
                         0.5,
                         sim_label,
                         transform=ax.transAxes,
                         fontsize=11,
-                        fontweight="bold",
                         va="center",
                         ha="right",
                         rotation=90,
@@ -187,7 +188,7 @@ class ResultsPlotter:
 
         plt.tight_layout()
 
-        output_path = self.figures_dir / "error_distribution_per_country.pdf"
+        output_path = self.figures_dir / f"error_distribution_per_country.{self.export_format}"
         plt.savefig(output_path)
         plt.close()
         print(f"Saved: {output_path}")
@@ -195,8 +196,9 @@ class ResultsPlotter:
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
-        self.plot_mae_by_simulation_and_year()
         self.plot_boxplot_per_country()
+        for error_metric in self.error_list:
+            self.plot_error_by_simulation_and_year(error_metric)
         print("All plots generated successfully!")
 
 
