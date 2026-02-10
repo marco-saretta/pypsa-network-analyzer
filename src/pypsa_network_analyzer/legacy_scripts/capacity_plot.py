@@ -5,16 +5,15 @@ Created on Mon Nov 24 11:03:10 2025
 @author: FEGU
 """
 
-''' FEGU functions '''
+""" FEGU functions """
 from pathlib import Path
 import pandas as pd
+
 file_dir = Path(__file__).parent.parent.resolve()
 import pypsa
 
 
-
-
-def collect_capacities(simulation: str,weather_year_dict:dict,weather_year: float, capacities_list:list):
+def collect_capacities(simulation: str, weather_year_dict: dict, weather_year: float, capacities_list: list):
     # FEGU change
     # --- Installed capacities merging ---
     external_file = f"{file_dir}/simulations/{simulation}/{weather_year}/results/summary/installed_capacities.csv"
@@ -24,39 +23,26 @@ def collect_capacities(simulation: str,weather_year_dict:dict,weather_year: floa
     # Expecting columns: ["generator", "capacity"]
     # Rename "capacity" → <weather_year_int>
     year = weather_year_dict[weather_year]
-    yearly_capacities = (
-        yearly_capacities
-        .set_index(["generator", "bus"])
-        .rename(columns={"p_nom_opt": year})
-    )
+    yearly_capacities = yearly_capacities.set_index(["generator", "bus"]).rename(columns={"p_nom_opt": year})
 
     capacities_list.append(yearly_capacities)
-    
+
     return capacities_list
 
 
-
-
-def plot_capacities_for_myears_all_generators(capacities_list, simulation: str, logger:None):
+def plot_capacities_for_myears_all_generators(capacities_list, simulation: str, logger: None):
     import matplotlib.pyplot as plt
 
     if capacities_list:
         capacities_df = pd.concat(capacities_list, axis=1)
 
-        output_path = (
-            file_dir
-            / "simulations"
-            / simulation
-            / "merged_installed_capacities.csv"
-        )
-        
+        output_path = file_dir / "simulations" / simulation / "merged_installed_capacities.csv"
+
         capacities_df.to_csv(output_path)
         logger.info(f"Merged installed capacities saved to {output_path}")
-        
+
         # --------------- CREATE PLOTS PER BUS ------------------- #
-        plot_dir = (
-            file_dir / "simulations" / simulation / "capacity_plots"
-        )
+        plot_dir = file_dir / "simulations" / simulation / "capacity_plots"
         plot_dir.mkdir(exist_ok=True)
 
         # unique bus names
@@ -66,7 +52,7 @@ def plot_capacities_for_myears_all_generators(capacities_list, simulation: str, 
             df_bus = capacities_df.xs(bus, level="bus")
 
             plt.figure(figsize=(10, 6))
-            df_bus.plot(kind="bar")   # each generator = row, each year = column
+            df_bus.plot(kind="bar")  # each generator = row, each year = column
             plt.title(f"Installed Capacity by Generator for Bus {bus}")
             plt.xlabel("Generator")
             plt.ylabel("Capacity")
@@ -78,36 +64,26 @@ def plot_capacities_for_myears_all_generators(capacities_list, simulation: str, 
             plt.close()
 
             logger.info(f"Saved plot: {plot_path}")
-            
-            
- 
-            
-def plot_capacities_for_myears(capacities_list, simulation: str, logger:None):
+
+
+def plot_capacities_for_myears(capacities_list, simulation: str, logger: None):
     import matplotlib.pyplot as plt
 
     if capacities_list:
         capacities_df = pd.concat(capacities_list, axis=1)
 
-        output_path = (
-            file_dir
-            / "simulations"
-            / simulation
-            / "merged_installed_capacities.csv"
-        )
-        
+        output_path = file_dir / "simulations" / simulation / "merged_installed_capacities.csv"
+
         capacities_df.to_csv(output_path)
         logger.info(f"Merged installed capacities saved to {output_path}")
-        
+
         # --------------- CREATE PLOTS PER BUS ------------------- #
-        plot_dir = (
-            file_dir / "simulations" / simulation / "capacity_plots"
-        )
+        plot_dir = file_dir / "simulations" / simulation / "capacity_plots"
         plot_dir.mkdir(exist_ok=True)
 
         # unique bus names
         buses = capacities_df.index.get_level_values("bus").unique()
 
-        
         import re
 
         def has_token_zero(name):
@@ -117,16 +93,16 @@ def plot_capacities_for_myears(capacities_list, simulation: str, logger:None):
 
         for bus in buses:
             df_bus = capacities_df.xs(bus, level="bus")
-            
+
             # Filter generators that contain token "0"
             df_bus = df_bus[df_bus.index.map(has_token_zero)]
-        
+
             # If no generators left, skip
             if df_bus.empty:
                 continue
 
             plt.figure(figsize=(10, 6))
-            df_bus.plot(kind="bar")   # each generator = row, each year = column
+            df_bus.plot(kind="bar")  # each generator = row, each year = column
             plt.title(f"Installed Capacity by Generator for Bus {bus}")
             plt.xlabel("Generator")
             plt.ylabel("Capacity")
@@ -138,50 +114,34 @@ def plot_capacities_for_myears(capacities_list, simulation: str, logger:None):
             plt.close()
 
             logger.info(f"Saved plot: {plot_path}")
-            
-            
 
-def collect_generator_info(simulation: str,weather_year_dict:dict,weather_year: float, gen_cap_info_list:list):
+
+def collect_generator_info(simulation: str, weather_year_dict: dict, weather_year: float, gen_cap_info_list: list):
     # FEGU change
     # --- Installed capacities merging ---
-    external_file = f"{file_dir}/simulations/{simulation}/{weather_year}/results/summary/generator_capacity_collected_info.csv"
+    external_file = (
+        f"{file_dir}/simulations/{simulation}/{weather_year}/results/summary/generator_capacity_collected_info.csv"
+    )
 
     gen_cap_info = pd.read_csv(external_file)
 
     cols = gen_cap_info.columns
     year = weather_year_dict[weather_year]
-    gen_cap_info = (
-        gen_cap_info
-        .set_index("generator")
-        .rename(columns={
-            col: f"{col}_{year}"
-            for col in cols
-            if col not in ["generator", "bus"]
-        })
+    gen_cap_info = gen_cap_info.set_index("generator").rename(
+        columns={col: f"{col}_{year}" for col in cols if col not in ["generator", "bus"]}
     )
 
     gen_cap_info_list.append(gen_cap_info)
-    
-    return gen_cap_info_list
-            
 
-    
+    return gen_cap_info_list
+
+
 def generator_cap_check(gen_cap_info_list, simulation: str, logger: None):
-    
-    output_path = (
-        file_dir
-        / "simulations"
-        / simulation
-        / "generator_extendable.csv"
-    )
-    
-    inconsistencies_path = (
-        file_dir
-        / "simulations"
-        / simulation
-        / "inconsistencies.csv"
-    )
-    
+
+    output_path = file_dir / "simulations" / simulation / "generator_extendable.csv"
+
+    inconsistencies_path = file_dir / "simulations" / simulation / "inconsistencies.csv"
+
     if gen_cap_info_list:
         gen_cap_info_df = pd.concat(gen_cap_info_list, axis=1)
 
@@ -224,11 +184,3 @@ def generator_cap_check(gen_cap_info_list, simulation: str, logger: None):
         cutout_extendable.to_csv(output_path)
 
         return
-
-        
-            
-     
-
-
-
-            

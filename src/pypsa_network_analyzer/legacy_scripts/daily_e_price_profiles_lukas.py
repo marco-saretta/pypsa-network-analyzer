@@ -11,7 +11,7 @@ Created on Mon Dec 15 09:56:29 2025
 
 @author: Lalka
 """
-#%%
+# %%
 import pypsa
 import pandas as pd
 from pathlib import Path
@@ -20,7 +20,7 @@ import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.patches import Rectangle
 from matplotlib.legend_handler import HandlerBase
-#%%
+# %%
 
 
 # Fonts for plot
@@ -29,7 +29,7 @@ other_font = 18
 ticks_font = 14
 
 
-'''   Entso-e data   '''
+"""   Entso-e data   """
 # Load file
 file_dir = Path(__file__).parent.parent.resolve()
 external_file = f"{file_dir}/data/prices/electricity_prices.csv"
@@ -41,8 +41,7 @@ e_prices.index = pd.to_datetime(e_prices.index)
 e_prices.index = e_prices.index.tz_localize(None)
 
 
-
-#%%
+# %%
 
 # =========================
 # Country/region to bidding zones mapping
@@ -63,18 +62,18 @@ country_mapping = {
 }
 
 
-#%%
+# %%
 
-'''   Model data   '''
-#simulation = "hindcast-dyn-spec-cap"
-#simulation = "hindcast-dyn"
-#simulation = "hindcast_dyn_old"
-#simulation = "hindcast-std"
-#simulation="hindcast-dyn-2022"
-#simulation="hindcast-dyn-spec-cap"
-#simulation="hindcast-dyn-spec-cap-rolling" 
-#simulation = "hindcast-dyn-rolling"
-simulation="hindcast-dyn-spec-cap-irena"
+"""   Model data   """
+# simulation = "hindcast-dyn-spec-cap"
+# simulation = "hindcast-dyn"
+# simulation = "hindcast_dyn_old"
+# simulation = "hindcast-std"
+# simulation="hindcast-dyn-2022"
+# simulation="hindcast-dyn-spec-cap"
+# simulation="hindcast-dyn-spec-cap-rolling"
+# simulation = "hindcast-dyn-rolling"
+simulation = "hindcast-dyn-spec-cap-irena"
 
 
 external_file = f"{file_dir}/simulations/{simulation}/results_concat/combined_electricity_prices.csv"
@@ -83,26 +82,59 @@ e_prices_pypsa.set_index("snapshot", inplace=True)
 e_prices_pypsa.index = pd.to_datetime(e_prices_pypsa.index)
 
 
+# %%
 
-#%%
 
-
-'''   Input for run and plot   '''
+"""   Input for run and plot   """
 # Year, time and country to plot
 years = [2020, 2021, 2022, 2023, 2024]
 
 
-countries = ['AL', 'AT', 'BA', 'BE', 'BG', 'CH', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI',
-       'FR', 'GB', 'GBI', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'ME',
-       'MK', 'NL', 'NO', 'PL', 'PT', 'RO', 'RS', 'SE', 'SI', 'SK', 'XK', 'EUR', 'DE_LU']
+countries = [
+    "AL",
+    "AT",
+    "BA",
+    "BE",
+    "BG",
+    "CH",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "GB",
+    "GBI",
+    "GR",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "ME",
+    "MK",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "RS",
+    "SE",
+    "SI",
+    "SK",
+    "XK",
+    "EUR",
+    "DE_LU",
+]
 
 
 time_filter_dict = ["year", "winter", "spring", "summer", "fall"]
 
 
-
-
-''' Calculate load average data for countries with multiple bidding zone '''
+""" Calculate load average data for countries with multiple bidding zone """
 external_file_load = f"{file_dir}/data/load/demand.csv"
 load = pd.read_csv(external_file_load)
 load.rename(columns={"Unnamed: 0": "snapshot"}, inplace=True)
@@ -112,12 +144,14 @@ load.index = pd.to_datetime(load.index)
 load.index = load.index.tz_localize(None)
 
 
-#%%
+# %%
 # Read in the load data from pypsa model results for comparison for the years 2020-2024
 # We need to concat 4 files here for each year
 load_list = []
 for year in years:
-    external_file_load_pypsa = f"{file_dir}/simulations/{simulation}/weather_year_{year}/results/summary/electric_load.csv"
+    external_file_load_pypsa = (
+        f"{file_dir}/simulations/{simulation}/weather_year_{year}/results/summary/electric_load.csv"
+    )
     load_year = pd.read_csv(external_file_load_pypsa)
     load_year.set_index("snapshot", inplace=True)
     load_year.index = pd.to_datetime(load_year.index)
@@ -125,18 +159,16 @@ for year in years:
 load_pypsa = pd.concat(load_list)
 load_pypsa
 
-#%%
-# filter load and e_prices to only include timestamps that are present in e_prices_pypsa  
+# %%
+# filter load and e_prices to only include timestamps that are present in e_prices_pypsa
 index = e_prices_pypsa.index
 load = load.loc[index]
 e_prices = e_prices.loc[index]
-#%%
+# %%
 
 
+# %%
 
-
-
-#%%
 
 def aggregate_real_to_countries(
     price_real: pd.DataFrame,
@@ -164,10 +196,11 @@ def aggregate_real_to_countries(
         load_real[country] = total_load
         price_real = price_real.reindex(sorted(price_real.columns), axis=1)
         load_real = load_real.reindex(sorted(load_real.columns), axis=1)
-    
+
     return price_real, load_real
 
-#%%
+
+# %%
 
 
 def harmonize_and_compare_prices(
@@ -191,16 +224,13 @@ def harmonize_and_compare_prices(
     # -------------------------------------------------
     # 1) Aggregate real data to countries FIRST
     # -------------------------------------------------
-    price_real_c, load_real_c = aggregate_real_to_countries(
-        price_real, load_real, country_mapping
-    )
+    price_real_c, load_real_c = aggregate_real_to_countries(price_real, load_real, country_mapping)
 
     # -------------------------------------------------
     # 2) Align timestamps
     # -------------------------------------------------
     common_index = (
-        price_model.index
-        .intersection(load_model.index)
+        price_model.index.intersection(load_model.index)
         .intersection(price_real_c.index)
         .intersection(load_real_c.index)
     )
@@ -213,12 +243,7 @@ def harmonize_and_compare_prices(
     # -------------------------------------------------
     # 3) Find common country columns
     # -------------------------------------------------
-    common_countries = (
-        set(pm.columns)
-        & set(lm.columns)
-        & set(pr.columns)
-        & set(lr.columns)
-    )
+    common_countries = set(pm.columns) & set(lm.columns) & set(pr.columns) & set(lr.columns)
     common_countries = sorted(common_countries)
 
     print("Common countries used in comparison:")
@@ -248,7 +273,7 @@ def harmonize_and_compare_prices(
     return european_price
 
 
-#%%
+# %%
 
 # Call the function to harmonize and compare prices
 european_price = harmonize_and_compare_prices(
@@ -256,10 +281,10 @@ european_price = harmonize_and_compare_prices(
     load_model=load_pypsa,
     price_real=e_prices,
     load_real=load,
-    country_mapping=country_mapping
+    country_mapping=country_mapping,
 )
 
-#%%
+# %%
 
 # Daily resampling
 daily_price = european_price[["price_model", "price_real"]].resample("D").mean()
@@ -269,13 +294,14 @@ daily_price["year"] = daily_price.index.year
 daily_price["doy"] = daily_price.index.dayofyear
 
 
-#%%
+# %%
 import matplotlib.pyplot as plt
 import numpy as np
 
 # =========================
 # Plot: all years in one figure
 # =========================
+
 
 def plot_european_daily_prices_all_years(
     european_price: pd.DataFrame,
@@ -361,10 +387,7 @@ def plot_european_daily_prices_all_years(
     # -------------------------------------------------
     # 5) Legend 2: year → color
     # -------------------------------------------------
-    year_handles = [
-        plt.Line2D([0], [0], color=color_map[year], lw=3)
-        for year in years_sorted
-    ]
+    year_handles = [plt.Line2D([0], [0], color=color_map[year], lw=3) for year in years_sorted]
 
     year_labels = [str(year) for year in years_sorted]
 
@@ -389,8 +412,7 @@ def plot_european_daily_prices_all_years(
     plt.show()
 
 
-
-#%%
+# %%
 plot_european_daily_prices_all_years(
     european_price=european_price,
     years=years,

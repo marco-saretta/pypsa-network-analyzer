@@ -29,18 +29,17 @@ class ResultsPlotter:
         self.load_data()
 
         # Formatting config
-        mpl.rcParams['axes.spines.right'] = False
-        mpl.rcParams['axes.spines.top'] = False
+        mpl.rcParams["axes.spines.right"] = False
+        mpl.rcParams["axes.spines.top"] = False
 
         sns.set_theme(
             style="whitegrid",
             context="paper",
             font_scale=1.1,
         )
-        self.year_palette = sns.color_palette("colorblind")  # Colorblind palette
         self.phi = 1.618
 
-        # Define maximum values for x-axis
+        # Config labels
         self.error_max_values = {"mae": 250, "rmse": 300, "smape": 150}
         self.error_axis_labels = {"mae": "[EUR/MWh]", "rmse": "[EUR/MWh]", "smape": "[%]"}
 
@@ -101,15 +100,13 @@ class ResultsPlotter:
             y=error_metric,
             hue="year",
             hue_order=year_order,
-            palette=sns.color_palette(palette='coolwarm'),
-            #palette=self.year_palette,
+            palette=sns.color_palette(palette="Blues"),
             width=0.8,
             linewidth=0.6,
             showfliers=False,
         )
         sns.despine(right=True, top=True)
 
-        # plt.ylabel("MAE (EUR/MWh)")
         plt.xlabel("")
         plt.xticks(rotation=0, ha="center")
         plt.grid(axis="y", alpha=0.3)
@@ -202,14 +199,24 @@ class ResultsPlotter:
         plt.close()
         print(f"Saved: {output_path}")
 
+    def plot_prices(self):
+        print('whassup baby')
+        
+        
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
+        
+        # Print boxplot per country across sims
         self.plot_boxplot_per_country()
+        
+        # Plot individual boxplot for simulation per year
         for error_metric in self.error_list:
             self.plot_error_by_simulation_and_year(error_metric, x_length=7)
         print("All plots generated successfully!")
 
+        # Plot price simulations
+        self.plot_prices()
 
 @hydra.main(
     version_base=None,
