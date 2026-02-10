@@ -1253,6 +1253,7 @@ class NetworkAnalyzer:
                 plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
                 plot_folder.mkdir(parents=True, exist_ok=True)
                 plt.savefig(plot_folder / f"{country}_generator_dispatch_generation_monthly.pdf")
+                plt.close()
                 
                 
                 
@@ -1304,6 +1305,7 @@ class NetworkAnalyzer:
                 plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
                 plot_folder.mkdir(parents=True, exist_ok=True)
                 plt.savefig(plot_folder / f"{country}_generator_dispatch_share_monthly.pdf")
+                plt.close()
                 
             
             
@@ -1346,6 +1348,7 @@ class NetworkAnalyzer:
             plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
             plot_folder.mkdir(parents=True, exist_ok=True)
             plt.savefig(plot_folder / "Europe_generator_dispatch_generation_monthly.pdf")
+            plt.close()
             
             
             
@@ -1385,7 +1388,8 @@ class NetworkAnalyzer:
             plt.tight_layout()
             plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
             plot_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(plot_folder / "Europe_generator_dispatch_share_monthly.pdf") 
+            plt.savefig(plot_folder / "Europe_generator_dispatch_share_monthly.pdf")
+            plt.close() 
         
     
     def plot_all_figures(self):
@@ -1406,8 +1410,8 @@ class NetworkAnalyzer:
             self.plot_generation_mix_annual(bus)  # Plot annual generation mix
             self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
             self.plot_hydro_analysis(bus)  # Plot hydro analysis
-            # self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
-            self.plot_total_dispatch_all_buses()
+            self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
+            #self.plot_total_dispatch_all_buses()
         self.plot_EUR_country_generation_function()
 
        
