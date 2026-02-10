@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import seaborn as sns
 
 
@@ -22,19 +23,26 @@ class ResultsPlotter:
         self.error_list = ["mae", "rmse", "smape"]
         self.benchmark = "electricity_prices"
         self.export_format = cfg.plot_export_format
-
-        # Define units for each error metric
         self.error_units = {"mae": "EUR/MWh", "rmse": "EUR/MWh", "smape": "%"}
 
         # Load data
         self.load_data()
 
-        # Set seaborn style
+        # Formatting config
+        mpl.rcParams['axes.spines.right'] = False
+        mpl.rcParams['axes.spines.top'] = False
+
         sns.set_theme(
             style="whitegrid",
             context="paper",
             font_scale=1.1,
         )
+        self.year_palette = sns.color_palette("colorblind")  # Colorblind palette
+        self.phi = 1.618
+
+        # Define maximum values for x-axis
+        self.error_max_values = {"mae": 250, "rmse": 300, "smape": 150}
+        self.error_axis_labels = {"mae": "[EUR/MWh]", "rmse": "[EUR/MWh]", "smape": "[%]"}
 
     def load_data(self):
         """Load all error scores into a dictionary structure."""
@@ -52,7 +60,7 @@ class ResultsPlotter:
                 df = pd.read_csv(file_path, index_col=0)
                 self.scores_dict[sim_label][error] = df
 
-    def plot_error_by_simulation_and_year(self, error_metric):
+    def plot_error_by_simulation_and_year(self, error_metric, x_length=8):
         """Create boxplot showing MAE by simulation and year."""
         error_metric = error_metric
         records = []
@@ -85,7 +93,7 @@ class ResultsPlotter:
         year_order = sorted(long_df["year"].unique())
 
         # Plot
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(x_length, x_length / self.phi))
 
         sns.boxplot(
             data=long_df,
@@ -93,17 +101,22 @@ class ResultsPlotter:
             y=error_metric,
             hue="year",
             hue_order=year_order,
-            width=0.7,
-            linewidth=1.1,
+            palette=sns.color_palette(palette='coolwarm'),
+            #palette=self.year_palette,
+            width=0.8,
+            linewidth=0.6,
             showfliers=False,
         )
+        sns.despine(right=True, top=True)
 
-        #plt.ylabel("MAE (EUR/MWh)")
+        # plt.ylabel("MAE (EUR/MWh)")
         plt.xlabel("")
         plt.xticks(rotation=0, ha="center")
         plt.grid(axis="y", alpha=0.3)
+        plt.ylim(bottom=0, top=self.error_max_values[error_metric])
+        plt.ylabel(self.error_axis_labels[error_metric])
 
-        plt.legend(title="Year", frameon=False)
+        plt.legend(title="Year", frameon=True)
         plt.tight_layout()
 
         output_path = self.figures_dir / f"{error_metric}_by_simulation_and_year.{self.export_format}"
@@ -114,16 +127,12 @@ class ResultsPlotter:
     def plot_boxplot_per_country(self, x_length=8):
         """Create grid of boxplots showing error distributions per country."""
 
-        phi = 1.618
         fig, axes = plt.subplots(
             nrows=len(self.sim_labels),
             ncols=len(self.error_list),
-            figsize=(x_length, x_length * phi),
+            figsize=(x_length, x_length * self.phi),
             sharex="col",
         )
-
-        # Define maximum values for x-axis
-        x_max_values = {"mae": 250, "rmse": 300, "smape": 150}
 
         for i, sim_label in enumerate(self.sim_labels):
             for j, error in enumerate(self.error_list):
@@ -173,7 +182,7 @@ class ResultsPlotter:
         for j, error in enumerate(self.error_list):
             # Set limits for all rows in this column
             for i in range(len(self.sim_labels)):
-                axes[i, j].set_xlim(left=0, right=x_max_values[error])
+                axes[i, j].set_xlim(left=0, right=self.error_max_values[error])
 
             # Configure only the top subplot in each column
             top_ax = axes[0, j]
@@ -198,7 +207,7 @@ class ResultsPlotter:
         print("Generating plots...")
         self.plot_boxplot_per_country()
         for error_metric in self.error_list:
-            self.plot_error_by_simulation_and_year(error_metric)
+            self.plot_error_by_simulation_and_year(error_metric, x_length=7)
         print("All plots generated successfully!")
 
 
