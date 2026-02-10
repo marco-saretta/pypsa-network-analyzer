@@ -3,62 +3,24 @@ defaults:
   - _self_
 
 network_files:
-# Hindcast dynamic old
-- "hindcast_dyn_old_wy2020.nc"
-- "hindcast_dyn_old_wy2021.nc"
-- "hindcast_dyn_old_wy2022.nc"
-- "hindcast_dyn_old_wy2023.nc"
-- "hindcast_dyn_old_wy2024.nc"
-# Hindcast standard old
-# - "hindcast_std_old_wy2020.nc"
-# - "hindcast_std_old_wy2021.nc"
-# - "hindcast_std_old_wy2022.nc"
-# - "hindcast_std_old_wy2023.nc"
-# - "hindcast_std_old_wy2024.nc"
-# Hindcast dynamic
-- "hindcast_dyn_wy2020.nc"
-- "hindcast_dyn_wy2021.nc"
-- "hindcast_dyn_wy2022.nc"
-- "hindcast_dyn_wy2023.nc"
-- "hindcast_dyn_wy2024.nc"
-# # Hindcast standard
-# - "hindcast_std_wy2020.nc"
-# - "hindcast_std_wy2021.nc"
-# - "hindcast_std_wy2022.nc"
-# - "hindcast_std_wy2023.nc"
-# - "hindcast_std_wy2024.nc"
-# # Hindcast dynamic year 2022
-# - "hindcast-dyn-2022.nc"
-# # Hindcast dynamic specific capacity
-# - "hindcast_dyn_spec_cap_wy2020.nc"
-# - "hindcast_dyn_spec_cap_wy2021.nc"
-# - "hindcast_dyn_spec_cap_wy2022.nc"
-# - "hindcast_dyn_spec_cap_wy2023.nc"
-# - "hindcast_dyn_spec_cap_wy2024.nc"
-# # Hindcast dynamic specific capacity rolling horizon
-# - "hindcast_dyn_spec_cap_rolling_wy2020.nc"
-# - "hindcast_dyn_spec_cap_rolling_wy2021.nc"
-# - "hindcast_dyn_spec_cap_rolling_wy2022.nc"
-# - "hindcast_dyn_spec_cap_rolling_wy2023.nc"
-# - "hindcast_dyn_spec_cap_rolling_wy2024.nc"
-# # Hindcast dynamic specific capacity IRENA
-# - "hindcast_dyn_spec_cap_irena_wy2020.nc"
-# - "hindcast_dyn_spec_cap_irena_wy2021.nc"
-# - "hindcast_dyn_spec_cap_irena_wy2022.nc"
-# - "hindcast_dyn_spec_cap_irena_wy2023.nc"
-# - "hindcast_dyn_spec_cap_irena_wy2024.nc"
-# # Hindcast dynamic specific capacity IRENA rolling horizon
-# - "hindcast_dyn_spec_cap_rolling_irena_wy2020.nc"
-# - "hindcast_dyn_spec_cap_rolling_irena_wy2021.nc"
-# - "hindcast_dyn_spec_cap_rolling_irena_wy2022.nc"
-# - "hindcast_dyn_spec_cap_rolling_irena_wy2023.nc"
-# - "hindcast_dyn_spec_cap_rolling_irena_wy2024.nc"
-# # Hindcast dynamic rolling horizon
-# - "hindcast_dyn_rolling_wy2020.nc"
-# - "hindcast_dyn_rolling_wy2021.nc"
-# - "hindcast_dyn_rolling_wy2022.nc"
-# - "hindcast_dyn_rolling_wy2023.nc"
-# - "hindcast_dyn_rolling_wy2024.nc"
+# hindcast-std:
+- "hindcast-std-wy2020.nc"
+- "hindcast-std-wy2021.nc"
+- "hindcast-std-wy2022.nc"
+- "hindcast-std-wy2023.nc"
+- "hindcast-std-wy2024.nc"
+# hindcast-dyn-rolling:
+- "hindcast-dyn-rolling-wy2020.nc"
+- "hindcast-dyn-rolling-wy2021.nc"
+- "hindcast-dyn-rolling-wy2022.nc"
+- "hindcast-dyn-rolling-wy2023.nc"
+- "hindcast-dyn-rolling-wy2024.nc"
+# hindcast-dyn:
+- "hindcast-dyn-wy2020.nc"
+- "hindcast-dyn-wy2021.nc"
+- "hindcast-dyn-wy2022.nc"
+- "hindcast-dyn-wy2023.nc"
+- "hindcast-dyn-wy2024.nc"
 
 paths:
   root: "${hydra:runtime.cwd}"
