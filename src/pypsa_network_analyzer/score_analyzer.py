@@ -39,28 +39,36 @@ class ScoreAnalyzer:
             return df.tz_localize("UTC") if df.index.tz is None else df.tz_convert("UTC")
 
         self.df_benchmark_raw = _load(self.benchmark_file_dir)
-        self.df_raw = _load(self.file_dir)
-
-    def _filter_years(self):
-        """Filter both dataframes to the years and align indices."""
-        years = self.years_list
-
-        df = self.df_raw[self.df_raw.index.year.isin(years)]
-        df_bm = self.df_benchmark_raw[self.df_benchmark_raw.index.year.isin(years)]
-
-        # Align rows exactly (important for leap year behavior)
-        df_bm = df_bm.loc[df.index]
-        self.df = df
-        self.df_benchmark = df_bm
+        self.df_pypsa_raw = _load(self.file_dir)
 
     def _interpolate_na(self):
         """Interpolate missing values in both raw DataFrames."""
-        self.df_benchmark_raw = self.df_benchmark_raw.interpolate().ffill().bfill()
-        self.df_raw = self.df_raw.interpolate().ffill().bfill()
+        self.df_benchmark_interp = self.df_benchmark_raw.interpolate()
+        self.df_pypsa_interp = self.df_pypsa_raw.interpolate()
+
+    def _filter_years(self):
+        """Filter both dataframes to the years and align indices."""
+
+        self.df_benchmark_fyears = self.df_benchmark_interp[self.df_benchmark_interp.index.year.isin(self.years_list)]
+        self.df_pypsa_fyears = self.df_pypsa_interp[self.df_pypsa_interp.index.year.isin(self.years_list)]
+
+        self.df_pypsa = self.df_pypsa_fyears
+
+        # If statement to check if time index coincides. If not, proobably due to leap years
+        if not self.df_pypsa_fyears.index.equals(self.df_benchmark_fyears.index):
+            self.logger.warning(
+                "Benchmark dataframe and target dataframe have different indices. Check for leap years."
+            )
+
+            # Align rows exactly (important for leap year behavior)
+            self.df_benchmark = self.df_benchmark_fyears.loc[self.df_pypsa_fyears.index]
+            self.logger.info("Aligned dataframes indices to account for leap years.")
+        else:
+            self.df_benchmark = self.df_benchmark_fyears
 
     def _get_common_columns(self):
         """Find intersection of countries."""
-        self.common_cols = sorted(set(self.df_benchmark.columns).intersection(self.df.columns))
+        self.common_cols = sorted(set(self.df_benchmark.columns).intersection(self.df_pypsa.columns))
         self.logger.info(f"Found {len(self.common_cols)} common countries: {self.common_cols}")
 
     def compute_scores_by_year(self):
@@ -69,24 +77,21 @@ class ScoreAnalyzer:
         Return: df_mae, df_rmse, df_smape
         """
 
-        years = self.years_list
-        countries = self.common_cols
+        df_mae = pd.DataFrame(index=self.years_list, columns=self.common_cols, dtype=float)
+        df_rmse = pd.DataFrame(index=self.years_list, columns=self.common_cols, dtype=float)
+        df_smape = pd.DataFrame(index=self.years_list, columns=self.common_cols, dtype=float)
 
-        df_mae = pd.DataFrame(index=years, columns=countries, dtype=float)
-        df_rmse = pd.DataFrame(index=years, columns=countries, dtype=float)
-        df_smape = pd.DataFrame(index=years, columns=countries, dtype=float)
-
-        for year in years:
+        for year in self.years_list:
             try:
                 bench_y = self.df_benchmark[self.df_benchmark.index.year == year]
-                sim_y = self.df[self.df.index.year == year]
+                sim_y = self.df_pypsa[self.df_pypsa.index.year == year]
 
                 # Exact index alignment
                 idx = bench_y.index.intersection(sim_y.index)
                 bench_y = bench_y.reindex(idx)
                 sim_y = sim_y.reindex(idx)
 
-                for c in countries:
+                for c in self.common_cols:
                     b = bench_y[c].to_numpy()
                     s = sim_y[c].to_numpy()
 
@@ -103,7 +108,7 @@ class ScoreAnalyzer:
         fig, ax = plt.subplots(figsize=(12, 6))
 
         ax.plot(self.df_benchmark.index, self.df_benchmark[country], label="Benchmark", color="tab:blue")
-        ax.plot(self.df.index, self.df[country], label="Dynamic", color="#ff7f0e")
+        ax.plot(self.df_pypsa.index, self.df_pypsa[country], label="Dynamic", color="#ff7f0e")
 
         ax.legend()
         ax.set_title(f"{country} – Electricity Prices (EUR/MWh)")

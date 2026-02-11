@@ -18,7 +18,7 @@ def main(cfg: DictConfig) -> None:
     for network_file in tqdm(cfg.network_files, desc="Processing networks"):
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
-            analyzer.extract_summary()
+            # analyzer.extract_summary()
             # analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
