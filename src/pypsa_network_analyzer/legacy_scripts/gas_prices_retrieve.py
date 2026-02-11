@@ -49,6 +49,7 @@ def plot_gas_prices():
 
     ax.grid(visible=True, which="major", linestyle=":", color="gray", alpha=0.6)
 
+    plt.savefig("ttf_prices.pdf")
     plt.show()
 
 

@@ -48,7 +48,7 @@ def main(cfg: DictConfig) -> None:
                 logger=logger,
             )
         df_mae, df_rmse, df_smape = score_analyzer.compute_scores_by_year()
-
+        
         # Drop any excluded countries
         if cfg.exclude_countries:
             df_mae = df_mae.drop(columns=cfg.exclude_countries, errors="ignore")

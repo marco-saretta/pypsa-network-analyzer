@@ -12,26 +12,32 @@ class ResultsPlotter:
     """Class to handle loading and plotting of simulation results."""
 
     def __init__(self, cfg: DictConfig):
+        # Config and directories
         self.cfg = cfg
         self.root_dir = Path(cfg.paths.root)
-        self.results_root = self.root_dir / "results_concat"
+        self.data_dir = self.root_dir / "data"
+        self.results_concat_dir = self.root_dir / "results_concat"
         self.figures_dir = self.root_dir / "figures_paper"
         self.figures_dir.mkdir(exist_ok=True)
 
         # Configuration
         self.sim_labels = list(cfg.config_results_concat.keys())
         self.error_list = ["mae", "rmse", "smape"]
-        self.benchmark = "electricity_prices"
+        self.benchmark_name = "electricity_prices"
         self.export_format = cfg.plot_export_format
         self.error_units = {"mae": "EUR/MWh", "rmse": "EUR/MWh", "smape": "%"}
 
-        # Load data
-        self.load_data()
+        # Config labels
+        self.error_max_values = {"mae": 250, "rmse": 300, "smape": 150}
+        self.error_axis_labels = {"mae": "[EUR/MWh]", "rmse": "[EUR/MWh]", "smape": "[%]"}
 
-        # Formatting config
+        self.setup_style()
+        self.load_scores()
+        self.load_prices()
+
+    def setup_style(self):
         mpl.rcParams["axes.spines.right"] = False
         mpl.rcParams["axes.spines.top"] = False
-
         sns.set_theme(
             style="whitegrid",
             context="paper",
@@ -39,9 +45,23 @@ class ResultsPlotter:
         )
         self.phi = 1.618
 
-        # Config labels
-        self.error_max_values = {"mae": 250, "rmse": 300, "smape": 150}
-        self.error_axis_labels = {"mae": "[EUR/MWh]", "rmse": "[EUR/MWh]", "smape": "[%]"}
+        self.country_color = {"DE": "tab:blue"}
+
+    def load_scores(self):
+        """Load all error scores into a dictionary structure."""
+        self.scores_dict = {}
+
+        for sim_label in self.sim_labels:
+            self.scores_dict[sim_label] = {}
+            for error in self.error_list:
+                error_file = f"scores_{error}.csv"
+                file_path = self.results_concat_dir / sim_label / self.benchmark_name / "scores" / error_file
+
+                if not file_path.exists():
+                    raise FileNotFoundError(f"Missing file: {file_path}")
+
+                df = pd.read_csv(file_path, index_col=0)
+                self.scores_dict[sim_label][error] = df
 
     def load_data(self):
         """Load all error scores into a dictionary structure."""
@@ -51,13 +71,48 @@ class ResultsPlotter:
             self.scores_dict[sim_label] = {}
             for error in self.error_list:
                 error_file = f"scores_{error}.csv"
-                file_path = self.results_root / sim_label / self.benchmark / "scores" / error_file
+                file_path = self.results_concat_dir / sim_label / self.benchmark_name / "scores" / error_file
 
                 if not file_path.exists():
                     raise FileNotFoundError(f"Missing file: {file_path}")
 
                 df = pd.read_csv(file_path, index_col=0)
                 self.scores_dict[sim_label][error] = df
+
+    def load_prices(self, sim_labels=None, interpolate=True):
+        """
+        Load and clean benchmark + simulation prices.
+        Stores result in self.prices_dict dict.
+        """
+        if sim_labels is None:
+            sim_labels = self.sim_labels
+
+        self.prices_dict = {}
+
+        # Load simulation
+        for sim_label in sim_labels:
+            file_dir = self.results_concat_dir / sim_label / self.benchmark_name / f"combined_{self.benchmark_name}.csv"
+
+            df_sim = pd.read_csv(file_dir, index_col=0, parse_dates=True)
+            df_sim = df_sim[df_sim.index.year.isin(self.cfg.years_list)]
+
+            self.prices_dict[sim_label] = df_sim
+
+        # Load benchmark
+        benchmark_path = self.data_dir / "benchmark" / "electricity_prices.csv"
+        df_bench = pd.read_csv(benchmark_path, index_col=0, parse_dates=True)
+
+        if df_bench.index.tz is None:
+            df_bench.index = df_bench.index.tz_localize("UTC")
+        else:
+            df_bench.index = df_bench.index.tz_convert("UTC")
+
+        if interpolate:
+            df_bench = df_bench.interpolate().ffill().bfill()
+
+        df_bench = df_bench[df_bench.index.year.isin(self.cfg.years_list)]
+
+        self.prices_dict["benchmark"] = df_bench
 
     def plot_error_by_simulation_and_year(self, error_metric, x_length=8):
         """Create boxplot showing MAE by simulation and year."""
@@ -66,7 +121,9 @@ class ResultsPlotter:
 
         # Loop over simulation groups
         for sim_name in self.sim_labels:
-            csv_path = self.results_root / sim_name / self.benchmark / "scores" / f"scores_{error_metric}.csv"
+            csv_path = (
+                self.results_concat_dir / sim_name / self.benchmark_name / "scores" / f"scores_{error_metric}.csv"
+            )
 
             if not csv_path.exists():
                 raise FileNotFoundError(f"Missing file: {csv_path}")
@@ -91,8 +148,6 @@ class ResultsPlotter:
         long_df["year"] = long_df["year"].astype(str)
         year_order = sorted(long_df["year"].unique())
 
-        self.long_df = long_df
-
         # Plot
         plt.figure(figsize=(x_length, x_length / self.phi))
 
@@ -108,8 +163,6 @@ class ResultsPlotter:
             showfliers=False,
         )
         sns.despine(right=True, top=True)
-
-        self.long_df
 
         plt.xlabel("")
         plt.xticks(rotation=0, ha="center")
@@ -203,23 +256,69 @@ class ResultsPlotter:
         plt.close()
         print(f"Saved: {output_path}")
 
-    def plot_prices(self):
-        print("whassup baby")
+
+    def plot_prices(self, x_length=8, resampling_rule="W", countries_list=["DE"], rolling_window=None):
+        """Plot benchmark vs simulations per country."""
+
+        for country in countries_list:
+            fig, ax = plt.subplots(figsize=(x_length, x_length / self.phi))
+
+            for label, df in self.prices_dict.items():
+                if country not in df.columns:
+                    continue
+
+                series = df[country]
+
+                if resampling_rule:
+                    series = series.resample(resampling_rule).mean()
+
+                if rolling_window:
+                    series = series.rolling(rolling_window, center=True).mean()
+
+                if label == "benchmark":
+                    ax.plot(
+                        series.index,
+                        series,
+                        label="Benchmark",
+                        color="black",
+                        linewidth=1,
+                    )
+                else:
+                    ax.plot(
+                        series.index,
+                        series,
+                        label=label,
+                        alpha=0.8,
+                    )
+
+            ax.set_title(f"{country} electricity price")
+            ax.set_ylabel("EUR/MWh")
+            ax.grid(alpha=0.3)
+            ax.legend(frameon=False)
+
+            plt.tight_layout()
+
+            output_path = self.figures_dir / f"price_{country}.{self.export_format}"
+            plt.savefig(output_path)
+            plt.close()
+
+            print(f"Saved: {output_path}")
 
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
 
         # Print boxplot per country across sims
-        # self.plot_boxplot_per_country()
+        self.plot_boxplot_per_country()
 
         # Plot individual boxplot for simulation per year
         for error_metric in self.error_list:
             self.plot_error_by_simulation_and_year(error_metric, x_length=7)
-        print("All plots generated successfully!")
 
         # Plot price simulations
-        # self.plot_prices()
+        self.plot_prices()
+
+        print("All plots generated successfully!")
 
 
 @hydra.main(
@@ -235,4 +334,4 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    plotter = main()
+    main()
