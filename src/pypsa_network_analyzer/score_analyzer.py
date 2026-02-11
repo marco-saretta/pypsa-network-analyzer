@@ -43,8 +43,8 @@ class ScoreAnalyzer:
 
     def _interpolate_na(self):
         """Interpolate missing values in both raw DataFrames."""
-        self.df_benchmark_interp = self.df_benchmark_raw.interpolate()
-        self.df_pypsa_interp = self.df_pypsa_raw.interpolate()
+        self.df_benchmark_interp = self.df_benchmark_raw.interpolate().ffill().bfill()
+        self.df_pypsa_interp = self.df_pypsa_raw.interpolate().ffill().bfill()
 
     def _filter_years(self):
         """Filter both dataframes to the years and align indices."""

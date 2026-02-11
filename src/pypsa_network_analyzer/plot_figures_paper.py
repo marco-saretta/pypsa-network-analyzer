@@ -91,6 +91,8 @@ class ResultsPlotter:
         long_df["year"] = long_df["year"].astype(str)
         year_order = sorted(long_df["year"].unique())
 
+        self.long_df = long_df
+
         # Plot
         plt.figure(figsize=(x_length, x_length / self.phi))
 
@@ -106,6 +108,8 @@ class ResultsPlotter:
             showfliers=False,
         )
         sns.despine(right=True, top=True)
+
+        self.long_df
 
         plt.xlabel("")
         plt.xticks(rotation=0, ha="center")
@@ -200,23 +204,23 @@ class ResultsPlotter:
         print(f"Saved: {output_path}")
 
     def plot_prices(self):
-        print('whassup baby')
-        
-        
+        print("whassup baby")
+
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
-        
+
         # Print boxplot per country across sims
-        self.plot_boxplot_per_country()
-        
+        # self.plot_boxplot_per_country()
+
         # Plot individual boxplot for simulation per year
         for error_metric in self.error_list:
             self.plot_error_by_simulation_and_year(error_metric, x_length=7)
         print("All plots generated successfully!")
 
         # Plot price simulations
-        self.plot_prices()
+        # self.plot_prices()
+
 
 @hydra.main(
     version_base=None,
@@ -227,7 +231,8 @@ def main(cfg: DictConfig):
     """Main entry point for Hydra."""
     plotter = ResultsPlotter(cfg)
     plotter.generate_all_plots()
+    return plotter
 
 
 if __name__ == "__main__":
-    main()
+    plotter = main()
