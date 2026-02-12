@@ -103,26 +103,6 @@ class ScoreAnalyzer:
 
         return df_mae, df_rmse, df_smape
 
-    def _plot_country(self, country, save=False, plot_dir=None):
-        plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        ax.plot(self.df_benchmark.index, self.df_benchmark[country], label="Benchmark", color="tab:blue")
-        ax.plot(self.df_pypsa.index, self.df_pypsa[country], label="Dynamic", color="#ff7f0e")
-
-        ax.legend()
-        ax.set_title(f"{country} – Electricity Prices (EUR/MWh)")
-        ax.set_ylabel("EUR/MWh")
-        ax.grid(True, linestyle="--", alpha=0.4)
-
-        if save:
-            out = Path(plot_dir or (self.sim_folder_dir / "plots"))
-            out.mkdir(parents=True, exist_ok=True)
-            fig.savefig(out / f"{country}_comparison.png", dpi=300)
-            plt.close(fig)
-        else:
-            plt.show()
-
     def save_scores(self, df, filename):
         path = self.scores_dir / filename
         df.to_csv(path)

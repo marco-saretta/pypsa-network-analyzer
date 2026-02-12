@@ -36,16 +36,35 @@ class ResultsPlotter:
         self.load_prices()
 
     def setup_style(self):
+        plt.style.use("seaborn-v0_8-whitegrid")
         mpl.rcParams["axes.spines.right"] = False
         mpl.rcParams["axes.spines.top"] = False
-        sns.set_theme(
-            style="whitegrid",
-            context="paper",
-            font_scale=1.1,
-        )
+        # sns.set_theme(style="whitegrid",context="paper",font_scale=1.1)
         self.phi = 1.618
 
-        self.country_color = {"DE": "tab:blue"}
+        # Colorblind-friendly palette from Okabe-Ito
+        self.nature_orange = "#e69f00"
+        self.nature_sky_blue = "#56b4e9"
+        self.nature_bluish_green = "#009e73"
+        self.nature_yellow = "#f0e442"
+        self.nature_blue = "#0072b2"
+        self.nature_vermillion = "#d55e00"
+        self.nature_reddish_purple = "#cc79a7"
+
+        # Set global Matplotlib font to Arial using plt.rcParams
+        plt.rcParams["font.family"] = "Arial"
+        plt.rcParams["axes.titleweight"] = "bold"
+        # plt.rcParams['axes.labelweight'] = 'bold'
+        plt.rcParams["axes.labelsize"] = 12
+        plt.rcParams["xtick.labelsize"] = 10
+        plt.rcParams["ytick.labelsize"] = 10
+
+        self.sim_color = {
+            "benchmark": self.nature_sky_blue,
+            "hindcast-dyn": self.nature_bluish_green,
+            "hindcast-dyn-rolling": self.nature_vermillion,
+            "hindcast-std": self.nature_orange,
+        }
 
     def load_scores(self):
         """Load all error scores into a dictionary structure."""
@@ -256,8 +275,9 @@ class ResultsPlotter:
         plt.close()
         print(f"Saved: {output_path}")
 
-
-    def plot_prices(self, x_length=8, resampling_rule="W", countries_list=["DE"], rolling_window=None):
+    def plot_prices(
+        self, x_length=8, resampling_rule="W", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
+    ):
         """Plot benchmark vs simulations per country."""
 
         for country in countries_list:
@@ -272,29 +292,22 @@ class ResultsPlotter:
                 if resampling_rule:
                     series = series.resample(resampling_rule).mean()
 
-                if rolling_window:
-                    series = series.rolling(rolling_window, center=True).mean()
-
                 if label == "benchmark":
-                    ax.plot(
-                        series.index,
-                        series,
-                        label="Benchmark",
-                        color="black",
-                        linewidth=1,
-                    )
+                    ax.plot(series.index, series, label="Benchmark", color=self.sim_color[label])
                 else:
                     ax.plot(
                         series.index,
                         series,
                         label=label,
-                        alpha=0.8,
+                        color=self.sim_color[label],
                     )
 
-            ax.set_title(f"{country} electricity price")
-            ax.set_ylabel("EUR/MWh")
-            ax.grid(alpha=0.3)
-            ax.legend(frameon=False)
+                ax.legend(frameon=True)
+                ax.set_title(f"{country} – Electricity Prices weekly resample", loc="left", fontsize=14, pad=20)
+                ax.set_xlim(left = series.index.min(), right = series.index.max())
+                #ax.set_ylim(bottom=0)
+                ax.set_ylabel("EUR/MWh")
+                ax.grid(True, linestyle="dashed", alpha=0.5)
 
             plt.tight_layout()
 
