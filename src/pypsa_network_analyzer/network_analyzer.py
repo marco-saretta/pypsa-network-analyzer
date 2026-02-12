@@ -1213,6 +1213,30 @@ class NetworkAnalyzer:
             "PyPSA": df_generators_pypsa_monthly,
             "ENTSO-E": df_combined_monthly
         }
+
+        # Compute y-limits per country using BOTH datasets
+        ylims = {}
+
+        all_countries = sorted({
+            c.split(" ")[0]
+            for df in [df_generators_pypsa_monthly, df_combined_monthly]
+            for c in df.columns
+        })
+
+        for country in all_countries:
+            max_values = []
+
+            for df in [df_generators_pypsa_monthly, df_combined_monthly]:
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                df_country = df[country_cols]
+
+                if not df_country.empty:
+                    # stacked total for area plot
+                    max_values.append(df_country.sum(axis=1).max())
+
+            if max_values:
+                ylims[country] = max(max_values)
+
         
         for label, df in dataframes.items():
         
@@ -1239,9 +1263,23 @@ class NetworkAnalyzer:
                     title=f"{country} Generation by Technology ({label})",
                     color=colors
                 )
-        
-                ax.set_ylabel("Montly dispatch [GWh]")
+
+
+
+
+                ax = df_country.plot.area(
+                        figsize=(12, 6),
+                        title=f"{country} Generation by Technology ({label})",
+                        color=colors
+                    )
+
+                ax.set_ylabel("Monthly dispatch [GWh]")
                 ax.set_xlabel("Time")
+
+                if country in ylims:
+                    ax.set_ylim(0, ylims[country])
+        
+        
                 ax.legend(
                     loc='upper center',        # center horizontally
                     bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
@@ -1252,7 +1290,7 @@ class NetworkAnalyzer:
                 plt.tight_layout()
                 plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
                 plot_folder.mkdir(parents=True, exist_ok=True)
-                plt.savefig(plot_folder / f"{country}_generator_dispatch_generation_monthly.pdf")
+                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_monthly.pdf")
                 plt.close()
                 
                 
@@ -1292,7 +1330,7 @@ class NetworkAnalyzer:
                     ylim = [0,100],
                 )
         
-                ax.set_ylabel("Dispatch Share [%]")
+                ax.set_ylabel("Monthly Dispatch Share [%]")
                 ax.set_xlabel("Time")
                 ax.legend(
                     loc='upper center',        # center horizontally
@@ -1304,7 +1342,7 @@ class NetworkAnalyzer:
                 plt.tight_layout()
                 plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
                 plot_folder.mkdir(parents=True, exist_ok=True)
-                plt.savefig(plot_folder / f"{country}_generator_dispatch_share_monthly.pdf")
+                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_share_monthly.pdf")
                 plt.close()
                 
             
@@ -1316,6 +1354,16 @@ class NetworkAnalyzer:
             "PyPSA": df_generators_pypsa_europe/1e3,
             "ENTSO-E": df_combined_europe/1e3
         }
+
+        # Compute shared y-limit for Europe using BOTH datasets (already in TWh)
+        max_values = []
+
+        for df in [df_generators_pypsa_europe/1e3, df_combined_europe/1e3]:
+            if not df.empty:
+                max_values.append(df.sum(axis=1).max())
+
+        europe_ylim = max(max_values) if max_values else None
+
         
         for label, df in dataframes_europe.items():
         
@@ -1336,6 +1384,10 @@ class NetworkAnalyzer:
         
             ax.set_ylabel("Monthly dispatch [TWh]")
             ax.set_xlabel("Time")
+
+            if europe_ylim is not None:
+                ax.set_ylim(0, europe_ylim)
+
         
             ax.legend(
                 loc='upper center',
@@ -1347,7 +1399,7 @@ class NetworkAnalyzer:
             plt.tight_layout()
             plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
             plot_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(plot_folder / "Europe_generator_dispatch_generation_monthly.pdf")
+            plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_generation_monthly.pdf")
             plt.close()
             
             
@@ -1375,7 +1427,7 @@ class NetworkAnalyzer:
                 color=colors,
             )
         
-            ax.set_ylabel("Monthly dispatch [TWh]")
+            ax.set_ylabel("Monthly Dispatch Share [%]")
             ax.set_xlabel("Time")
         
             ax.legend(
@@ -1388,7 +1440,7 @@ class NetworkAnalyzer:
             plt.tight_layout()
             plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
             plot_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(plot_folder / "Europe_generator_dispatch_share_monthly.pdf")
+            plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_share_monthly.pdf")
             plt.close() 
         
     
@@ -1410,8 +1462,8 @@ class NetworkAnalyzer:
             self.plot_generation_mix_annual(bus)  # Plot annual generation mix
             self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
             self.plot_hydro_analysis(bus)  # Plot hydro analysis
-            self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
-            #self.plot_total_dispatch_all_buses()
+            #self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
+            self.plot_total_dispatch_all_buses()
         self.plot_EUR_country_generation_function()
 
        
