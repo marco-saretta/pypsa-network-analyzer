@@ -4,6 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
 from omegaconf import DictConfig
+import os
+import re
+
+
 
 import logging
 
@@ -949,6 +953,497 @@ class NetworkAnalyzer:
         hydro_p.sum(axis=1).plot(ax=axs[1], title="Hydro Reservoir Daily avg Power", color=self.nature_bluish_green)
         self._save_plot(fig, f"{bus}_hydro_power", bus=bus)
 
+    
+    def plot_EUR_country_generation_function(self):
+    
+        #print("Running EUR_total_generation_function_monthly...")
+        n = self.n
+        # --------------------------------------------------
+        # Load hourly generation data
+        # --------------------------------------------------
+
+        # Load external generation data for this bus
+        folder = (
+                self.root_dir / "data" / "generation" / "generation_hourly_data"
+        )
+
+        folder_plot_dispatch = self.network_file_res_dir / "summary" / "dispatch"
+        folder_plot_dispatch.mkdir(parents=True, exist_ok=True)
+
+        #folder_plot_dispatch_entso_e = self.network_file_res_dir / "summary" / "dispatch" / "entso_e"
+        #folder_plot_dispatch_entso_e.mkdir(parents=True, exist_ok=True)
+
+        #folder_plot_dispatch_pypsa = self.network_file_res_dir / "summary" / "dispatch" / "pypsa"
+        #folder_plot_dispatch_pypsa.mkdir(parents=True, exist_ok=True)
+
+        dfs = []
+        
+        for filename in os.listdir(folder):
+        #for filename in folder.glob("generation_*_hourly_data.csv"):
+            if filename.startswith("generation_") and filename.endswith("_hourly_data.csv"):
+                key = filename.removeprefix("generation_").removesuffix("_hourly_data.csv")
+        
+                # Skip if name contains "_"
+                if "_" in key:
+                    continue
+        
+                file_path = folder / filename
+                df = pd.read_csv(file_path, index_col=0)
+                df.index = pd.to_datetime(df.index)
+                df.index = df.index.tz_convert(None)
+                df = df.loc[df.index.intersection(n.snapshots)]
+        
+                # Add key as prefix to columns
+                df = df.add_prefix(f"{key} ")
+        
+                dfs.append(df)
+        
+        #  Combine all into one dataframe (columns side-by-side)
+        df_combined = pd.concat(dfs, axis=1)
+        
+            
+
+        custom_cols = {}
+        # Get all unique keys
+        keys = [col.split(" ", 1)[0] for col in df_combined.columns]
+        keys = list(set(keys))
+        
+        for key in keys:
+            # Construct full column names
+            agg_col = f"{key} ('Hydro Pumped Storage', 'Actual Aggregated')"
+            cons_col = f"{key} ('Hydro Pumped Storage', 'Actual Consumption')"
+            net_col = f"{key} Hydro Pumped Storage Net"
+            base_col = f"{key} Hydro Pumped Storage"
+        
+            # Compute custom column depending on available columns
+            if agg_col in df_combined.columns and cons_col in df_combined.columns:
+                custom_cols[key] = df_combined[agg_col] - df_combined[cons_col]
+            elif net_col in df_combined.columns:
+                custom_cols[key] = df_combined[net_col]
+            elif base_col in df_combined.columns:
+                custom_cols[key] = df_combined[base_col]
+        
+        # Add each custom column to the dataframe
+        for key, series in custom_cols.items():
+            df_combined[f"{key} Hydro Pumped Storage Custom"] = series
+            
+            
+        
+        # Step 1: remove columns containing 'Actual Consumption'
+        df_combined = df_combined.loc[
+            :, ~df_combined.columns.astype(str).str.contains("Actual Consumption")
+        ]
+        
+        
+        new_cols = []
+        
+        for c in df_combined.columns:
+            c_str = str(c)
+        
+            if "Actual Aggregated" in c_str:
+                # Extract country key (first word)
+                key = c_str.split(" ", 1)[0]
+        
+                # Extract first quoted text
+                match = re.search(r"'([^']+)'", c_str)
+        
+                if match:
+                    tech = match.group(1)
+                    new_cols.append(f"{key} {tech}")
+                else:
+                    new_cols.append(c_str)
+        
+            else:
+                new_cols.append(c_str)
+        
+        df_combined.columns = new_cols
+    
+        
+        
+        df_generators_pypsa = n.generators_t["p"]
+                    
+            
+        mapping = {
+            "0 offwind-ac": "Wind Offshore",
+            "0 offwind-dc": "Wind Offshore",
+            "0 onwind": "Wind Onshore",
+            "0 solar": "Solar",
+            "0 solar-hsat": "Solar",
+            "CCGT": "Fossil Gas",
+            "OCGT": "Fossil Gas",
+            #"PHS": "Hydro Pumped Storage Net",         Remove this and add it later
+            "biomass": "Biomass",
+            "coal": "Fossil Hard coal",
+            "geothermal": "Geothermal",
+            "hydro": "Hydro Run-of-river and poundage",
+            "lignite": "Fossil Brown coal/Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Fossil Oil",
+            "ror": "Hydro Run-of-river and poundage",
+        }
+        
+
+        
+        
+        def map_with_key(col):
+            parts = col.split(" ", 1)  # split into key and generator type
+            if len(parts) == 2:
+                key, gen_type = parts
+                mapped_type = mapping.get(gen_type, gen_type)  # default to original if not in mapping
+                return f"{key} {mapped_type}"
+            else:
+                return col  # if no space, return as is
+        
+        mapped_columns = [map_with_key(c) for c in df_generators_pypsa.columns]
+            
+        # Assign back
+        df_generators_pypsa.columns = mapped_columns
+        
+        
+        
+        
+        # Filter ENTSOE columns to keep only common tech
+        common_tech_cols = df_generators_pypsa.columns.intersection(df_combined.columns)
+        
+        df_combined = df_combined.loc[:, common_tech_cols]
+        df_combined = df_combined.dropna(axis=1, how="all")
+
+        
+        
+
+        #Mapping makes multiple tech have same name. This combines multiple of same tech for same country.
+        df_generators_pypsa = (df_generators_pypsa.T.groupby(level=0).sum().T)
+        
+        #PyPSA only having common technologies
+        df_generators_pypsa = df_generators_pypsa.loc[:, common_tech_cols]
+        
+        
+        # Monthly dispatch and MWh to GWh 
+        df_generators_pypsa_monthly = df_generators_pypsa.resample('ME').sum()/1e3 
+        df_combined_monthly = df_combined.resample('ME').sum()/1e3 
+        
+        
+        
+        # Put both dataframes in a dict
+        dataframes_monthly = {
+            "PyPSA": df_generators_pypsa_monthly,
+            "ENTSO-E": df_combined_monthly
+        }
+        
+        df_percent_dict = {}
+        
+        for label, df in dataframes_monthly.items():
+        
+            df_percent = pd.DataFrame(index=df.index)
+        
+            # Get all countries (first word of column names)
+            countries = sorted({c.split(" ")[0] for c in df.columns})
+        
+            for country in countries:
+                # Columns belonging to this country
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                
+                # Compute percentage relative to the country total
+                country_percent = df[country_cols].div(df[country_cols].sum(axis=1), axis=0) * 100
+                
+                # Add to the new dataframe
+                df_percent = pd.concat([df_percent, country_percent], axis=1)
+            
+            # Save result in dictionary
+            df_percent_dict[label] = df_percent
+        
+        # Now you can access:
+        df_generators_pypsa_monthly_percent = df_percent_dict["PyPSA"]
+        df_combined_monthly_percent = df_percent_dict["ENTSO-E"]
+        
+        
+        def aggregate_to_europe_total(df):
+            return (
+                df
+                .T
+                .groupby(lambda x: x.split(" ", 1)[1])  # group by technology
+                .sum()  # TOTAL across countries
+                .T
+            )
+        
+        df_generators_pypsa_europe = aggregate_to_europe_total(df_generators_pypsa_monthly)
+        df_combined_europe = aggregate_to_europe_total(df_combined_monthly)
+        
+        
+        df_generators_pypsa_europe_percent = df_generators_pypsa_europe.div(df_generators_pypsa_europe.sum(axis=1), axis=0) * 100
+        df_combined_europe_percent = df_combined_europe.div(df_combined_europe.sum(axis=1), axis=0) * 100
+        
+        
+        
+        # Color mapping for plotting
+        
+        color_dict = n.carriers["color"].to_dict()
+        
+        mapping_color = {
+            "offwind-ac": "Wind Offshore",
+            "offwind-dc": "Wind Offshore",
+            "onwind": "Wind Onshore",
+            "solar": "Solar",
+            "solar-hsat": "Solar",
+            "CCGT": "Fossil Gas",
+            "OCGT": "Fossil Gas",
+            "PHS": "Hydro Storage",        
+            "biomass": "Biomass",
+            "coal": "Fossil Hard coal",
+            "geothermal": "Geothermal",
+            "hydro": "Hydro Run-of-river and poundage",
+            "lignite": "Fossil Brown coal/Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Fossil Oil",
+            "ror": "Hydro Run-of-river and poundage",
+        }
+        
+        color_dict_new = {}
+
+        for original_name, new_name in mapping_color.items():
+            # Use the color from the original carrier
+            if original_name in color_dict:
+                color_dict_new[new_name] = color_dict[original_name]
+        
+
+
+
+        # Put both dataframes in a dict so we can label them nicely
+        dataframes = {
+            "PyPSA": df_generators_pypsa_monthly,
+            "ENTSO-E": df_combined_monthly
+        }
+
+        # Compute y-limits per country using BOTH datasets
+        ylims = {}
+
+        all_countries = sorted({
+            c.split(" ")[0]
+            for df in [df_generators_pypsa_monthly, df_combined_monthly]
+            for c in df.columns
+        })
+
+        for country in all_countries:
+            max_values = []
+
+            for df in [df_generators_pypsa_monthly, df_combined_monthly]:
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                df_country = df[country_cols]
+
+                if not df_country.empty:
+                    # stacked total for area plot
+                    max_values.append(df_country.sum(axis=1).max())
+
+            if max_values:
+                ylims[country] = max(max_values)
+
+        
+        for label, df in dataframes.items():
+        
+            # Get all unique countries/keys
+            countries = sorted({c.split(" ")[0] for c in df.columns})
+        
+            for country in countries:
+                # Select columns for this country
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                df_country = df[country_cols]
+        
+                if df_country.empty:
+                    continue
+        
+                # Build color list
+                colors = [
+                    color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                    for c in country_cols
+                ]
+        
+                # Plot
+                ax = df_country.plot.area(
+                    figsize=(12, 6),
+                    title=f"{country} Generation by Technology ({label})",
+                    color=colors
+                )
+
+
+
+
+                ax = df_country.plot.area(
+                        figsize=(12, 6),
+                        title=f"{country} Generation by Technology ({label})",
+                        color=colors
+                    )
+
+                ax.set_ylabel("Monthly dispatch [GWh]")
+                ax.set_xlabel("Time")
+
+                if country in ylims:
+                    ax.set_ylim(0, ylims[country])
+        
+        
+                ax.legend(
+                    loc='upper center',        # center horizontally
+                    bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+                    ncol=4,                    # number of columns in legend
+                    fontsize=10,
+                )
+                #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                plt.tight_layout()
+                plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                plot_folder.mkdir(parents=True, exist_ok=True)
+                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_monthly.pdf")
+                plt.close()
+                
+                
+                
+                
+                
+        # Put both dataframes in a dict so we can label them nicely
+        dataframes = {
+            "PyPSA": df_generators_pypsa_monthly_percent,
+            "ENTSO-E": df_combined_monthly_percent
+        }
+        
+        for label, df in dataframes.items():
+        
+            # Get all unique countries/keys
+            countries = sorted({c.split(" ")[0] for c in df.columns})
+        
+            for country in countries:
+                # Select columns for this country
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                df_country = df[country_cols]
+        
+                if df_country.empty:
+                    continue
+        
+                # Build color list
+                colors = [
+                    color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                    for c in country_cols
+                ]
+        
+                # Plot
+                ax = df_country.plot.area(
+                    figsize=(12, 6),
+                    title=f"{country} Dispatch Share by Technology ({label})",
+                    color=colors,
+                    ylim = [0,100],
+                )
+        
+                ax.set_ylabel("Monthly Dispatch Share [%]")
+                ax.set_xlabel("Time")
+                ax.legend(
+                    loc='upper center',        # center horizontally
+                    bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+                    ncol=4,                    # number of columns in legend
+                    fontsize=10,
+                )
+                #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                plt.tight_layout()
+                plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
+                plot_folder.mkdir(parents=True, exist_ok=True)
+                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_share_monthly.pdf")
+                plt.close()
+                
+            
+            
+            
+        # Put aggregated Europe dataframes in dict
+        # TWh
+        dataframes_europe = {
+            "PyPSA": df_generators_pypsa_europe/1e3,
+            "ENTSO-E": df_combined_europe/1e3
+        }
+
+        # Compute shared y-limit for Europe using BOTH datasets (already in TWh)
+        max_values = []
+
+        for df in [df_generators_pypsa_europe/1e3, df_combined_europe/1e3]:
+            if not df.empty:
+                max_values.append(df.sum(axis=1).max())
+
+        europe_ylim = max(max_values) if max_values else None
+
+        
+        for label, df in dataframes_europe.items():
+        
+            if df.empty:
+                continue
+        
+            # Build color list based on technology names
+            colors = [
+                color_dict_new.get(col, "#CCCCCC")
+                for col in df.columns
+            ]
+        
+            ax = df.plot.area(
+                figsize=(12, 6),
+                title=f"Europe Total Generation by Technology ({label})",
+                color=colors,
+            )
+        
+            ax.set_ylabel("Monthly dispatch [TWh]")
+            ax.set_xlabel("Time")
+
+            if europe_ylim is not None:
+                ax.set_ylim(0, europe_ylim)
+
+        
+            ax.legend(
+                loc='upper center',
+                bbox_to_anchor=(0.5, -0.15),
+                ncol=4,
+                fontsize=10,
+            )
+        
+            plt.tight_layout()
+            plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+            plot_folder.mkdir(parents=True, exist_ok=True)
+            plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_generation_monthly.pdf")
+            plt.close()
+            
+            
+            
+        # Put both dataframes in a dict so we can label them nicely
+        dataframes_europe = {
+            "PyPSA": df_generators_pypsa_europe_percent,
+            "ENTSO-E": df_combined_europe_percent
+        }
+        
+        for label, df in dataframes_europe.items():
+        
+            if df.empty:
+                continue
+        
+            # Build color list based on technology names
+            colors = [
+                color_dict_new.get(col, "#CCCCCC")
+                for col in df.columns
+            ]
+        
+            ax = df.plot.area(
+                figsize=(12, 6),
+                title=f"Europe Total Dispatch Share by Technology ({label})",
+                color=colors,
+            )
+        
+            ax.set_ylabel("Monthly Dispatch Share [%]")
+            ax.set_xlabel("Time")
+        
+            ax.legend(
+                loc='upper center',
+                bbox_to_anchor=(0.5, -0.15),
+                ncol=4,
+                fontsize=10,
+            )
+        
+            plt.tight_layout()
+            plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
+            plot_folder.mkdir(parents=True, exist_ok=True)
+            plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_share_monthly.pdf")
+            plt.close() 
+        
+    
     def plot_all_figures(self):
         """Generate and save standard analysis plots per bus."""
 
@@ -967,5 +1462,9 @@ class NetworkAnalyzer:
             self.plot_generation_mix_annual(bus)  # Plot annual generation mix
             self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
             self.plot_hydro_analysis(bus)  # Plot hydro analysis
-            # self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
+            #self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
             self.plot_total_dispatch_all_buses()
+        self.plot_EUR_country_generation_function()
+
+       
+        
