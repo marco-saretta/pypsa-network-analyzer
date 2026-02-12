@@ -26,7 +26,7 @@ dependencies = [
     "pytest>=8.3.4",
     "tqdm>=4.67.1",
     "typer==0.15.1",
-    "uvicorn==0.34.0",
+    "uvicorn==0.40.0",
     "yfinance>=1.1.0",
 ]
 
