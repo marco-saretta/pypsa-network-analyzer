@@ -18,14 +18,17 @@ cd pypsa-network-analyzer
 
 ```bash
 # Install uv (if not installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh                     # macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh                                     # macOS / Linux
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
-
-# Create virtual environment
-uv venv
 
 # Install dependencies from pyproject.toml
 uv sync
+
+# Quick run for main.py
+uv run main.py
+
+# To generate plots
+uv run src/pypsa_network_analyzer/plot_figures_paper.py
 ```
 
 
@@ -65,11 +68,15 @@ The directory structure of the project looks like this:
 │   └── source/
 │       └── index.md
 │                           
-├── src/                      # Source code
-│   └── pypsa_network_analyzer/
-│       ├── scripts/                 # Analysis and plotting scripts
-│       ├── utils/                   # Utilities and helpers
-│       └── __init__.py
+├── src/                          # Source code
+│   └── pypsa_network_analyzer/   
+│       ├── legacy_scripts/       # Old scripts not used
+│       ├── utils/                # Utilities and helpers
+│       ├── __init__.py           
+│       ├── network_analyzer.py   # Analysis for network file
+│       ├── score_analyzer.py     # Compute scores vs benchmark
+│       └── plt_figures_paper.py  # Plot figures for paper
+│       
 │
 ├── tests/                    # Unit tests
 │   ├── test_api.py

@@ -5,7 +5,6 @@ Created on Thu Jan 15 10:26:27 2026
 @author: FEGU
 """
 
-
 import pypsa
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -18,16 +17,16 @@ import os
 file_dir = Path(__file__).parent.parent.resolve()
 
 
-'''   Model data   '''
-#simulation = "hindcast-dyn-spec-cap"
-#simulation = "hindcast-dyn"
-#simulation = "hindcast_dyn_old"
-#simulation = "hindcast-std"
-#simulation="hindcast-dyn-2022"
-#simulation="hindcast-dyn-spec-cap"
-#simulation="hindcast-dyn-spec-cap-rolling" 
+"""   Model data   """
+# simulation = "hindcast-dyn-spec-cap"
+# simulation = "hindcast-dyn"
+# simulation = "hindcast_dyn_old"
+# simulation = "hindcast-std"
+# simulation="hindcast-dyn-2022"
+# simulation="hindcast-dyn-spec-cap"
+# simulation="hindcast-dyn-spec-cap-rolling"
 simulation = "hindcast-dyn-rolling"
-#simulation="hindcast-dyn-spec-cap-irena"
+# simulation="hindcast-dyn-spec-cap-irena"
 
 weather_year_dict = {
     "weather_year_2020": 2020,
@@ -43,9 +42,7 @@ time_filter_dict = ["year", "winter", "spring", "summer", "fall"]
 generator_dispatch_pypsa = []
 
 for weather_year in weather_year_dict.keys():
-    file_path = (
-        f"{file_dir}/simulations/{simulation}/{weather_year}/results/summary/total_generators_dispatch_with_hydro_phs.csv"
-    )
+    file_path = f"{file_dir}/simulations/{simulation}/{weather_year}/results/summary/total_generators_dispatch_with_hydro_phs.csv"
     df = pd.read_csv(file_path)
     df["weather_year"] = weather_year
     generator_dispatch_pypsa.append(df)
@@ -115,6 +112,7 @@ generator_dispatch_entsoe_combine = generator_dispatch_entsoe_combine.loc[:, com
 
 # --- Time window function ---
 
+
 def get_time_window(year: int, period: str, tz=None):
     if period == "year":
         start = pd.Timestamp(f"{year}-01-01 00:00:00")
@@ -129,7 +127,7 @@ def get_time_window(year: int, period: str, tz=None):
         start = pd.Timestamp(f"{year}-06-01 00:00:00")
         end = start + pd.DateOffset(months=3) - pd.Timedelta(hours=1)
     elif period == "winter":
-        start = pd.Timestamp(f"{year-1}-12-01 00:00:00")
+        start = pd.Timestamp(f"{year - 1}-12-01 00:00:00")
         end = start + pd.DateOffset(months=3) - pd.Timedelta(hours=1)
     else:
         raise ValueError(f"Unknown period: {period}")
@@ -137,6 +135,7 @@ def get_time_window(year: int, period: str, tz=None):
         start = start.tz_localize(tz)
         end = end.tz_localize(tz)
     return start, end
+
 
 # --- Create directories once ---
 
@@ -169,8 +168,8 @@ for source_name, dispatch_df in generator_sources.items():
                 start, end = get_time_window(weather_year, time_filter, tz="UTC")
                 period_data = dispatch_df.loc[start:end]
                 dispatch_totals[source_name][weather_year][time_filter] = period_data.sum()
-                
-                
+
+
 dispatch_totals = {}
 
 for source_name, dispatch_df in generator_sources.items():
@@ -191,8 +190,7 @@ for source_name, dispatch_df in generator_sources.items():
                 start, end = get_time_window(weather_year, time_filter, tz="UTC")
                 period_data = dispatch_df.loc[start:end]
                 dispatch_totals[source_name][weather_year][time_filter] = period_data.sum()
-                
-                
+
 
 # --- Plot total yearly dispatch per technology with 5 panels (one per year) ---
 
@@ -208,40 +206,27 @@ x = np.arange(n_techs)
 for i, year in enumerate(years):
     ax = axes[i]
 
-    pypsa_data = (
-        dispatch_totals['pypsa']
-        .get(year, {})
-        .get('year', pd.Series(dtype=float))
-        .reindex(techs)
-        .fillna(0)
-    )
-    hist_data = (
-        dispatch_totals['historical']
-        .get(year, {})
-        .get('year', pd.Series(dtype=float))
-        .reindex(techs)
-        .fillna(0)
-    )
+    pypsa_data = dispatch_totals["pypsa"].get(year, {}).get("year", pd.Series(dtype=float)).reindex(techs).fillna(0)
+    hist_data = dispatch_totals["historical"].get(year, {}).get("year", pd.Series(dtype=float)).reindex(techs).fillna(0)
 
-    bars1 = ax.bar(x - width/2, pypsa_data.values, width, label='PyPSA', color='tab:blue')
-    bars2 = ax.bar(x + width/2, hist_data.values, width, label='Historical', color='tab:orange')
+    bars1 = ax.bar(x - width / 2, pypsa_data.values, width, label="PyPSA", color="tab:blue")
+    bars2 = ax.bar(x + width / 2, hist_data.values, width, label="Historical", color="tab:orange")
 
     ax.set_title(str(year))
     ax.set_xticks(x)
-    ax.set_xticklabels(techs, rotation=45, ha='right', fontsize=8)
-    ax.grid(True, axis='y', linestyle='--', alpha=0.5)
+    ax.set_xticklabels(techs, rotation=45, ha="right", fontsize=8)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
 
     if i == 0:
-        ax.set_ylabel('Total Dispatch (TWh)')
+        ax.set_ylabel("Total Dispatch (TWh)")
 
-#fig.legend(['PyPSA', 'Historical'], loc='lower center', ncol=2, fontsize=12)
-#plt.suptitle('Yearly Generation Dispatch by Technology', fontsize=16)
-#plt.tight_layout(rect=[0, 0, 1, 0.95])
+# fig.legend(['PyPSA', 'Historical'], loc='lower center', ncol=2, fontsize=12)
+# plt.suptitle('Yearly Generation Dispatch by Technology', fontsize=16)
+# plt.tight_layout(rect=[0, 0, 1, 0.95])
 
 
-fig.legend(['PyPSA', 'Historical'], loc='upper center', bbox_to_anchor=(0.5, 0),
-           ncol=2, fontsize=12)
-plt.suptitle('Yearly Generation Dispatch by Technology', fontsize=16)
+fig.legend(["PyPSA", "Historical"], loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=12)
+plt.suptitle("Yearly Generation Dispatch by Technology", fontsize=16)
 plt.tight_layout()
 
 # --- Save figure to both plot directories ---
@@ -255,8 +240,6 @@ fig.savefig(historical_fig_path, dpi=300)
 plt.show()
 
 
-
-
 # Plotting for the different seasons in each year
 
 seasons = ["winter", "spring", "summer", "fall"]
@@ -268,42 +251,32 @@ x = np.arange(n_techs)
 
 for year in years:
     fig, axes = plt.subplots(nrows=1, ncols=len(seasons), figsize=(20, 5), sharey=True)
-    fig.suptitle(f'Seasonal Generation Dispatch Comparison for {year}', fontsize=16)
+    fig.suptitle(f"Seasonal Generation Dispatch Comparison for {year}", fontsize=16)
 
     for i, season in enumerate(seasons):
         ax = axes[i]
 
-        pypsa_data = (
-            dispatch_totals['pypsa']
-            .get(year, {})
-            .get(season, pd.Series(dtype=float))
-            .reindex(techs)
-            .fillna(0)
-        )
+        pypsa_data = dispatch_totals["pypsa"].get(year, {}).get(season, pd.Series(dtype=float)).reindex(techs).fillna(0)
 
         hist_data = (
-            dispatch_totals['historical']
-            .get(year, {})
-            .get(season, pd.Series(dtype=float))
-            .reindex(techs)
-            .fillna(0)
+            dispatch_totals["historical"].get(year, {}).get(season, pd.Series(dtype=float)).reindex(techs).fillna(0)
         )
 
-        bars1 = ax.bar(x - width/2, pypsa_data.values, width, label='PyPSA', color='tab:blue')
-        bars2 = ax.bar(x + width/2, hist_data.values, width, label='Historical', color='tab:orange')
+        bars1 = ax.bar(x - width / 2, pypsa_data.values, width, label="PyPSA", color="tab:blue")
+        bars2 = ax.bar(x + width / 2, hist_data.values, width, label="Historical", color="tab:orange")
 
         ax.set_title(season.capitalize())
         ax.set_xticks(x)
-        ax.set_xticklabels(techs, rotation=45, ha='right', fontsize=8)
-        ax.grid(True, axis='y', linestyle='--', alpha=0.5)
+        ax.set_xticklabels(techs, rotation=45, ha="right", fontsize=8)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.5)
 
         # Set y-axis lower limit to zero:
         ax.set_ylim(bottom=0)
 
         if i == 0:
-            ax.set_ylabel('Total Dispatch (TWh)')
+            ax.set_ylabel("Total Dispatch (TWh)")
 
-    fig.legend(['PyPSA', 'Historical'], loc='upper center', bbox_to_anchor=(0.5, 0), ncol=2, fontsize=12)
+    fig.legend(["PyPSA", "Historical"], loc="upper center", bbox_to_anchor=(0.5, 0), ncol=2, fontsize=12)
     plt.tight_layout(rect=[0, 0.05, 1, 0.95])
 
     # Save and show as before...
@@ -316,8 +289,3 @@ for year in years:
     fig.savefig(historical_fig_path, dpi=300)
 
     plt.show()
-
-
-
-
-

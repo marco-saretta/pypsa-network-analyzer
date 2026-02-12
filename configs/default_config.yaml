@@ -53,4 +53,6 @@ api_key: YOUR-ENTSOE-API-KEY
 plot_export_format: "pdf"
 exclude_countries:
   - 'MK'  # Add problematic countries here
+  - 'BG'
+  - 'RO'
 

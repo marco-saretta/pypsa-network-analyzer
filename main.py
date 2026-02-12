@@ -18,7 +18,7 @@ def main(cfg: DictConfig) -> None:
     for network_file in tqdm(cfg.network_files, desc="Processing networks"):
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
-            analyzer.extract_summary()
+            # analyzer.extract_summary()
             # analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
@@ -48,7 +48,7 @@ def main(cfg: DictConfig) -> None:
                 logger=logger,
             )
         df_mae, df_rmse, df_smape = score_analyzer.compute_scores_by_year()
-
+        
         # Drop any excluded countries
         if cfg.exclude_countries:
             df_mae = df_mae.drop(columns=cfg.exclude_countries, errors="ignore")
