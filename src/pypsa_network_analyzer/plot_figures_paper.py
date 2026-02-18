@@ -197,6 +197,82 @@ class ResultsPlotter:
         plt.close()
         print(f"Saved: {output_path}")
 
+    def plot_error_by_simulation_and_year_all(self, x_length=8):
+        """Create boxplot showing all error metrics by simulation and year."""
+
+        # Build long dataframes for each error metric
+        long_dfs = {}
+        for error_metric in self.error_list:
+            records = []
+            for sim_name in self.sim_labels:
+                csv_path = (
+                    self.results_concat_dir / sim_name / self.benchmark_name / "scores" / f"scores_{error_metric}.csv"
+                )
+
+                if not csv_path.exists():
+                    raise FileNotFoundError(f"Missing file: {csv_path}")
+
+                df = pd.read_csv(csv_path, index_col=0)
+                df_long = df.reset_index(names="year").melt(
+                    id_vars="year",
+                    var_name="country",
+                    value_name=error_metric,
+                )
+                df_long["simulation"] = sim_name
+                records.append(df_long)
+
+            long_df = pd.concat(records, ignore_index=True)
+            long_df["year"] = long_df["year"].astype(str)
+            long_dfs[error_metric] = long_df
+
+        year_order = sorted(long_dfs[self.error_list[0]]["year"].unique())
+
+        fig, axs = plt.subplots(
+            nrows=len(self.error_list), ncols=1,
+            sharex=True, sharey=False,
+            figsize=(x_length, x_length / self.phi * len(self.error_list))
+        )
+
+        # Handle case where there's only one error metric (axs won't be a list)
+        if len(self.error_list) == 1:
+            axs = [axs]
+
+        for ax, error_metric in zip(axs, self.error_list):
+            long_df = long_dfs[error_metric]
+
+            sns.boxplot(
+                ax=ax,
+                data=long_df,
+                x="simulation",
+                y=error_metric,
+                hue="year",
+                hue_order=year_order,
+                palette=sns.color_palette(palette="Blues"),
+                width=0.8,
+                linewidth=0.6,
+                showfliers=False,
+            )
+            sns.despine(ax=ax, right=True, top=True)
+
+            ax.set_xlabel("")
+            ax.grid(axis="y", alpha=0.3)
+            ax.set_ylim(bottom=0, top=self.error_max_values[error_metric])
+            ax.set_ylabel(f"{error_metric} {self.error_axis_labels[error_metric]}")
+
+            # Only show legend on the first subplot
+            if ax == axs[0]:
+                ax.legend(title="Year", frameon=True)
+            else:
+                ax.get_legend().remove()
+
+        plt.xticks(rotation=0, ha="center")
+        plt.tight_layout()
+
+        output_path = self.figures_dir / f"all_metric_by_simulation_and_year.{self.export_format}"
+        plt.savefig(output_path)
+        plt.close()
+        print(f"Saved: {output_path}")
+
     def plot_boxplot_per_country(self, x_length=8):
         """Create grid of boxplots showing error distributions per country."""
 
@@ -304,8 +380,8 @@ class ResultsPlotter:
 
                 ax.legend(frameon=True)
                 ax.set_title(f"{country} – Electricity Prices weekly resample", loc="left", fontsize=14, pad=20)
-                ax.set_xlim(left = series.index.min(), right = series.index.max())
-                #ax.set_ylim(bottom=0)
+                ax.set_xlim(left=series.index.min(), right=series.index.max())
+                # ax.set_ylim(bottom=0)
                 ax.set_ylabel("EUR/MWh")
                 ax.grid(True, linestyle="dashed", alpha=0.5)
 
@@ -323,6 +399,9 @@ class ResultsPlotter:
 
         # Print boxplot per country across sims
         self.plot_boxplot_per_country()
+
+        # Print single boxplot for error metrics
+        self.plot_error_by_simulation_and_year_all(x_length=6)
 
         # Plot individual boxplot for simulation per year
         for error_metric in self.error_list:
