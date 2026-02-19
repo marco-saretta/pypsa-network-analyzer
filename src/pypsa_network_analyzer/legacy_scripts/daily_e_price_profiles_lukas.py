@@ -1,16 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 16 09:26:16 2025
-
-@author: FEGU
-"""
-
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Dec 15 09:56:29 2025
-
-@author: Lalka
-"""
 # %%
 import pypsa
 import pandas as pd
@@ -31,15 +18,20 @@ ticks_font = 14
 
 """   Entso-e data   """
 # Load file
-file_dir = Path(__file__).parent.parent.resolve()
-external_file = f"{file_dir}/data/prices/electricity_prices.csv"
-e_prices = pd.read_csv(external_file)
-e_prices.rename(columns={"Unnamed: 0": "snapshot"}, inplace=True)
-e_prices.set_index("snapshot", inplace=True)
-# After reading CSV
-e_prices.index = pd.to_datetime(e_prices.index)
+file_dir = Path(__file__).parent.parent.parent.parent.resolve()
+external_file_entso_e = f"{file_dir}/data/benchmark/electricity_prices.csv"
+# Read in electricity prices and parse dates = True, first column as index
+e_prices = pd.read_csv(
+    external_file_entso_e,
+    parse_dates=True,
+    index_col=0
+)
+
+# Remove timezone
 e_prices.index = e_prices.index.tz_localize(None)
 
+# Rename index properly
+e_prices.index.name = "snapshot"
 
 # %%
 
@@ -51,35 +43,35 @@ country_mapping = {
     "SE": ["SE_1", "SE_2", "SE_3", "SE_4"],
     "NO": ["NO_1", "NO_2", "NO_3", "NO_4", "NO_5"],
     "IT": ["IT_CNOR", "IT_CSUD", "IT_NORD", "IT_SARD", "IT_SICI"],
-    "DE": ["DE_LU"],
-    # "EUR": [
-    #     "AT", "BE", "BG", "CH", "CZ", "DE_LU", "DK_1", "DK_2", "EE", "ES", "FI",
-    #     "FR", "GR", "HR", "HU", "IE_SEM", "IT_CNOR", "IT_CSUD", "IT_NORD",
-    #     "IT_SARD", "IT_SICI", "LV", "LT", "MK", "NL", "NO_1", "NO_2", "NO_3",
-    #     "NO_4", "NO_5", "PL", "PT", "RO", "RS", "SE_1", "SE_2", "SE_3", "SE_4",
-    #     "SI", "SK", "UA_IPS"
-    # ],
 }
 
 
 # %%
 
 """   Model data   """
-# simulation = "hindcast-dyn-spec-cap"
-# simulation = "hindcast-dyn"
-# simulation = "hindcast_dyn_old"
-# simulation = "hindcast-std"
-# simulation="hindcast-dyn-2022"
-# simulation="hindcast-dyn-spec-cap"
-# simulation="hindcast-dyn-spec-cap-rolling"
-# simulation = "hindcast-dyn-rolling"
-simulation = "hindcast-dyn-spec-cap-irena"
+simulations = [
+    "hindcast-dyn",
+    "hindcast-dyn-rolling",
+    "hindcast-std",
+]
 
 
-external_file = f"{file_dir}/simulations/{simulation}/results_concat/combined_electricity_prices.csv"
-e_prices_pypsa = pd.read_csv(external_file)
-e_prices_pypsa.set_index("snapshot", inplace=True)
-e_prices_pypsa.index = pd.to_datetime(e_prices_pypsa.index)
+# ------------------------------------------
+# Load model price data for all simulations
+# ------------------------------------------
+price_models = {}
+
+for simulation in simulations:
+    external_file = (
+        f"{file_dir}/results_concat/{simulation}/electricity_prices/"
+        f"combined_electricity_prices.csv"
+    )
+
+    df = pd.read_csv(external_file)
+    df.set_index("snapshot", inplace=True)
+    df.index = pd.to_datetime(df.index)
+
+    price_models[simulation] = df
 
 
 # %%
@@ -90,58 +82,20 @@ e_prices_pypsa.index = pd.to_datetime(e_prices_pypsa.index)
 years = [2020, 2021, 2022, 2023, 2024]
 
 
-countries = [
-    "AL",
-    "AT",
-    "BA",
-    "BE",
-    "BG",
-    "CH",
-    "CZ",
-    "DE",
-    "DK",
-    "EE",
-    "ES",
-    "FI",
-    "FR",
-    "GB",
-    "GBI",
-    "GR",
-    "HR",
-    "HU",
-    "IE",
-    "IT",
-    "LT",
-    "LU",
-    "LV",
-    "ME",
-    "MK",
-    "NL",
-    "NO",
-    "PL",
-    "PT",
-    "RO",
-    "RS",
-    "SE",
-    "SI",
-    "SK",
-    "XK",
-    "EUR",
-    "DE_LU",
-]
-
-
-time_filter_dict = ["year", "winter", "spring", "summer", "fall"]
-
 
 """ Calculate load average data for countries with multiple bidding zone """
-external_file_load = f"{file_dir}/data/load/demand.csv"
-load = pd.read_csv(external_file_load)
-load.rename(columns={"Unnamed: 0": "snapshot"}, inplace=True)
-load.set_index("snapshot", inplace=True)
-# After reading CSV
-load.index = pd.to_datetime(load.index)
+external_file_load = f"{file_dir}/data/benchmark/demand.csv"
+load = pd.read_csv(
+    external_file_load,
+    parse_dates=True,
+    index_col=0
+)
+
+# Remove timezone
 load.index = load.index.tz_localize(None)
+
+# Rename index properly
+load.index.name = "snapshot"
 
 
 # %%
@@ -150,7 +104,7 @@ load.index = load.index.tz_localize(None)
 load_list = []
 for year in years:
     external_file_load_pypsa = (
-        f"{file_dir}/simulations/{simulation}/weather_year_{year}/results/summary/electric_load.csv"
+        f"{file_dir}/results/{simulation}-wy{year}/summary/electric_load.csv"
     )
     load_year = pd.read_csv(external_file_load_pypsa)
     load_year.set_index("snapshot", inplace=True)
@@ -180,6 +134,19 @@ def aggregate_real_to_countries(
     using load-weighted prices.
     """
 
+    # First delete any existing country-level columns, which are in the mapping
+    for country in country_mapping.keys():
+        if country in price_real.columns:
+            price_real.drop(columns=country, inplace=True)
+            print(f"Dropped existing country column from price_real: {country}")
+        if country in load_real.columns:
+            load_real.drop(columns=country, inplace=True)
+            print(f"Dropped existing country column from load_real: {country}")
+        
+
+    # For Luxemburg copy the DE column in prices and add with LU as name 
+    price_real["LU"] = price_real["DE"]
+
     for country, zones in country_mapping.items():
         zones = [z for z in zones if z in price_real.columns and z in load_real.columns]
         if not zones:
@@ -187,6 +154,17 @@ def aggregate_real_to_countries(
 
         price_c = price_real[zones]
         load_c = load_real[zones]
+
+        print(f"Aggregating {country} from zones: {zones}")
+
+        # Make sure that when load is missing for up to 5 timesteps
+        # we take the average of the last known load value and the next known load value,
+        #  to avoid losing too much data
+        # Fill gaps up to 5 timesteps using interpolation
+        # Treat zeros as missing
+        load_c = load_c.replace(0, np.nan)
+        load_c = load_c.interpolate(method="time", limit=5)
+        price_c = price_c.interpolate(method="time", limit=5)
 
         weighted_price = (price_c * load_c).sum(axis=1) / load_c.sum(axis=1)
         total_load = load_c.sum(axis=1)
@@ -197,12 +175,12 @@ def aggregate_real_to_countries(
         price_real = price_real.reindex(sorted(price_real.columns), axis=1)
         load_real = load_real.reindex(sorted(load_real.columns), axis=1)
 
+
     return price_real, load_real
 
 
-# %%
 
-
+#%%
 def harmonize_and_compare_prices(
     price_model: pd.DataFrame,
     load_model: pd.DataFrame,
@@ -275,148 +253,100 @@ def harmonize_and_compare_prices(
 
 # %%
 
-# Call the function to harmonize and compare prices
-european_price = harmonize_and_compare_prices(
-    price_model=e_prices_pypsa,
-    load_model=load_pypsa,
-    price_real=e_prices,
-    load_real=load,
-    country_mapping=country_mapping,
-)
+# ------------------------------------------
+# Harmonize each simulation 
+# ------------------------------------------
+european_prices = {}
 
-# %%
-
-# Daily resampling
-daily_price = european_price[["price_model", "price_real"]].resample("D").mean()
-
-# Add helpers
-daily_price["year"] = daily_price.index.year
-daily_price["doy"] = daily_price.index.dayofyear
+for simulation in simulations:
+    european_prices[simulation] = harmonize_and_compare_prices(
+        price_model=price_models[simulation],
+        load_model=load_pypsa,
+        price_real=e_prices,
+        load_real=load,
+        country_mapping=country_mapping,
+    )
 
 
 # %%
 import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib as mpl
 
-# =========================
-# Plot: all years in one figure
-# =========================
-
-
-def plot_european_daily_prices_all_years(
-    european_price: pd.DataFrame,
-    years: list,
-    title: str = "European Daily Electricity Prices",
-    cmap_name: str = "viridis",
+def plot_weekly_european_prices_all_simulations(
+    european_prices: dict,
+    title: str = "European Weekly Electricity Prices (2020–2024)",
+    x_length: float = 8,
+    sim_color: dict | None = None,
 ):
     """
-    Plot daily European electricity prices:
-    - All years in one plot
-    - One color per year
-    - Model: solid line
-    - Historical: dashed line
-    - Two legends:
-        * Line style (model vs historical)
-        * Color (year)
+    Plot weekly European electricity prices styled consistently
+    with ResultsPlotter.plot_prices.
     """
 
-    # -------------------------------------------------
-    # 1) Daily resampling
-    # -------------------------------------------------
-    daily = european_price[["price_model", "price_real"]].resample("D").mean()
-    daily["year"] = daily.index.year
-    daily["doy"] = daily.index.dayofyear
+    # --- Style identical to class ---
+    plt.style.use("seaborn-v0_8-whitegrid")
+    mpl.rcParams["axes.spines.right"] = False
+    mpl.rcParams["axes.spines.top"] = False
+    plt.rcParams["font.family"] = "Arial"
 
-    # -------------------------------------------------
-    # 2) Colors per year
-    # -------------------------------------------------
-    years_sorted = sorted(years)
-    cmap = plt.get_cmap(cmap_name)
-    colors = cmap(np.linspace(0.1, 0.9, len(years_sorted)))
-    color_map = dict(zip(years_sorted, colors))
+    phi = 1.618
 
-    # -------------------------------------------------
-    # 3) Plot
-    # -------------------------------------------------
-    plt.figure(figsize=(14, 7))
+    # Same Okabe–Ito defaults as ResultsPlotter
+    default_sim_color = {
+        "benchmark": "#56b4e9",
+        "hindcast-dyn": "#009e73",
+        "hindcast-dyn-rolling": "#d55e00",
+        "hindcast-std": "#e69f00",
+    }
 
-    for year in years_sorted:
-        data_y = daily[daily["year"] == year]
-        if data_y.empty:
-            continue
+    if sim_color is None:
+        sim_color = default_sim_color
 
-        color = color_map[year]
+    fig, ax = plt.subplots(figsize=(x_length, x_length / phi))
 
-        # Model (solid)
-        plt.plot(
-            data_y["doy"],
-            data_y["price_model"],
-            color=color,
-            linewidth=2,
-        )
+    # --- Weekly resample ---
+    weekly_data = {}
+    for sim, df in european_prices.items():
+        weekly_data[sim] = df[["price_model", "price_real"]].resample("W").mean()
 
-        # Historical (dashed)
-        plt.plot(
-            data_y["doy"],
-            data_y["price_real"],
-            color=color,
-            linewidth=2,
-            linestyle="--",
-        )
+    # Historical
+    hist = next(iter(weekly_data.values()))["price_real"]
 
-    # -------------------------------------------------
-    # 4) Legend 1: line style (model vs historical)
-    # -------------------------------------------------
-    style_handles = [
-        plt.Line2D([0], [0], color="black", lw=2, linestyle="-"),
-        plt.Line2D([0], [0], color="black", lw=2, linestyle="--"),
-    ]
-    style_labels = ["Model", "Historical"]
-
-    style_legend = plt.legend(
-        style_handles,
-        style_labels,
-        fontsize=14,
-        loc="upper left",
-        title="Data source",
+    # --- Plot benchmark (same color logic as class) ---
+    ax.plot(
+        hist.index,
+        hist,
+        label="Benchmark",
+        color=sim_color["benchmark"],
+        linewidth=1.8,
     )
 
-    # IMPORTANT: keep first legend
-    plt.gca().add_artist(style_legend)
+    # --- Plot simulations ---
+    for sim, df in weekly_data.items():
+        ax.plot(
+            df.index,
+            df["price_model"],
+            label=sim,
+            color=sim_color.get(sim, None),
+        )
 
-    # -------------------------------------------------
-    # 5) Legend 2: year → color
-    # -------------------------------------------------
-    year_handles = [plt.Line2D([0], [0], color=color_map[year], lw=3) for year in years_sorted]
-
-    year_labels = [str(year) for year in years_sorted]
-
-    plt.legend(
-        year_handles,
-        year_labels,
-        fontsize=12,
-        loc="upper right",
-        title="Year",
-        ncol=1,
-    )
-
-    # -------------------------------------------------
-    # 6) Labels & styling
-    # -------------------------------------------------
-    plt.xlabel("Day of year", fontsize=16)
-    plt.ylabel("Electricity price [€/MWh]", fontsize=16)
-    plt.title(title, fontsize=20)
-    plt.grid(True, alpha=0.3)
+    # --- Formatting identical to class ---
+    ax.legend(frameon=True)
+    ax.set_title(title, loc="left", fontsize=14, pad=20)
+    ax.set_xlim(left=hist.index.min(), right=hist.index.max())
+    ax.set_ylabel("EUR/MWh")
+    ax.grid(True, linestyle="dashed", alpha=0.5)
     plt.tight_layout()
-
+    # Save as pdf in figures_paper folder
+    fig_dir = Path(__file__).parent.parent.parent.parent.resolve() / "figures_paper"
+    fig_path = fig_dir / "price_EU.pdf"
+    plt.savefig(fig_path, format="pdf")
     plt.show()
 
 
 # %%
-plot_european_daily_prices_all_years(
-    european_price=european_price,
-    years=years,
-    title="European Daily Electricity Prices (Model vs Historical)",
+plot_weekly_european_prices_all_simulations(
+    european_prices=european_prices,
 )
 
 # %%
