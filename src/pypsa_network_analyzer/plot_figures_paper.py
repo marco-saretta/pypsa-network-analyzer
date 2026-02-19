@@ -27,7 +27,6 @@ class ResultsPlotter:
         self.export_format = cfg.plot_export_format
         self.error_units = {"mae": "EUR/MWh", "rmse": "EUR/MWh", "smape": "%"}
 
-        # Config labels
         self.error_max_values = {"mae": 250, "rmse": 300, "smape": 150}
         self.error_axis_labels = {"mae": "[EUR/MWh]", "rmse": "[EUR/MWh]", "smape": "[%]"}
 
@@ -36,34 +35,51 @@ class ResultsPlotter:
         self.load_prices()
 
     def setup_style(self):
-        plt.style.use("seaborn-v0_8-whitegrid")
-        mpl.rcParams["axes.spines.right"] = False
-        mpl.rcParams["axes.spines.top"] = False
-        # sns.set_theme(style="whitegrid",context="paper",font_scale=1.1)
         self.phi = 1.618
 
-        # Colorblind-friendly palette from Okabe-Ito
-        self.nature_orange = "#e69f00"
-        self.nature_sky_blue = "#56b4e9"
-        self.nature_bluish_green = "#009e73"
-        self.nature_yellow = "#f0e442"
-        self.nature_blue = "#0072b2"
-        self.nature_vermillion = "#d55e00"
-        self.nature_reddish_purple = "#cc79a7"
+        sns.set_theme(style="whitegrid", context="paper", font_scale=1.1)
+        # plt.style.use("seaborn-v0_8-whitegrid")
+        plt.rcParams.update(
+            {
+                "font.family": "Arial",
+                "font.size": 8,
+                "axes.titlesize": 9,
+                "axes.labelsize": 8,  # Previous 12
+                "xtick.labelsize": 7,  # Previous 10
+                "ytick.labelsize": 7,  # Previous 10
+                "legend.fontsize": 7,
+                "axes.linewidth": 0.8,
+                "xtick.major.width": 0.8,
+                "ytick.major.width": 0.8,
+                "axes.spines.right": False,
+                "axes.spines.top": False,
+                "axes.titleweight": "bold",
+            }
+        )
 
-        # Set global Matplotlib font to Arial using plt.rcParams
-        plt.rcParams["font.family"] = "Arial"
-        plt.rcParams["axes.titleweight"] = "bold"
-        # plt.rcParams['axes.labelweight'] = 'bold'
-        plt.rcParams["axes.labelsize"] = 12
-        plt.rcParams["xtick.labelsize"] = 10
-        plt.rcParams["ytick.labelsize"] = 10
+        # Okabe–Ito palette (colorblind safe)
+        self.nature_orange = "#E69F00"
+        self.nature_sky_blue = "#56B4E9"
+        self.nature_bluish_green = "#009E73"
+        self.nature_yellow = "#F0E442"
+        self.nature_blue = "#0072B2"
+        self.nature_vermillion = "#D55E00"
+        self.nature_reddish_purple = "#CC79A7"
 
         self.sim_color = {
             "benchmark": self.nature_sky_blue,
             "hindcast-dyn": self.nature_bluish_green,
             "hindcast-dyn-rolling": self.nature_vermillion,
             "hindcast-std": self.nature_orange,
+        }
+
+        self.phi = 1.618
+
+        self.sim_color = {
+            "benchmark": self.nature_sky_blue,
+            "hindcast-dyn": self.nature_orange,
+            "hindcast-dyn-rolling": self.nature_bluish_green,
+            "hindcast-std": self.nature_vermillion,
         }
 
     def load_scores(self):
@@ -227,10 +243,16 @@ class ResultsPlotter:
 
         year_order = sorted(long_dfs[self.error_list[0]]["year"].unique())
 
+        palette = sns.color_palette(
+            "coolwarm",
+        )
+        year_palette = dict(zip(year_order, palette))
+
         fig, axs = plt.subplots(
-            nrows=len(self.error_list), ncols=1,
-            sharex=True, sharey=False,
-            figsize=(x_length, x_length / self.phi * len(self.error_list))
+            nrows=len(self.error_list),
+            ncols=1,
+            sharex=True,
+            figsize=(x_length, x_length * self.phi),
         )
 
         # Handle case where there's only one error metric (axs won't be a list)
@@ -247,9 +269,9 @@ class ResultsPlotter:
                 y=error_metric,
                 hue="year",
                 hue_order=year_order,
-                palette=sns.color_palette(palette="Blues"),
-                width=0.8,
-                linewidth=0.6,
+                palette=year_palette,
+                width=0.65,
+                linewidth=0.7,
                 showfliers=False,
             )
             sns.despine(ax=ax, right=True, top=True)
@@ -378,7 +400,6 @@ class ResultsPlotter:
 
         for i, sim_label in enumerate(self.sim_labels):
             for j, error in enumerate(self.error_list):
-
                 df = self.scores_dict[sim_label][error]
 
                 # rows = years, columns = countries
@@ -392,7 +413,8 @@ class ResultsPlotter:
                 year_order = sorted(df_long["year"].unique())
 
                 # Same year color logic as other year-based plots
-                palette = sns.color_palette("Blues", n_colors=len(year_order))
+                # Palette options: mako, blues, coolwarm, crest, mako, rocket_r, rocket
+                palette = sns.color_palette("coolwarm", n_colors=len(year_order))
                 year_color_map = dict(zip(year_order, palette))
 
                 ax = axes[i][j]
@@ -402,14 +424,15 @@ class ResultsPlotter:
                     subset = df_long[df_long["year"] == year]
 
                     sc = ax.scatter(
-                        subset[error],          # x = error value
-                        subset["country"],      # y = country
+                        subset[error],
+                        subset["country"],
                         color=year_color_map[year],
                         s=40,
-                        marker="o",
-                        edgecolors="none",
+                        edgecolor="white",
+                        linewidth=0.4,
+                        alpha=0.9,
                         label=year if (i == 0 and j == 0) else None,
-                        zorder=3,  
+                        zorder=3,
                     )
 
                     # Collect legend entries only once
@@ -417,16 +440,17 @@ class ResultsPlotter:
                         legend_handles.append(sc)
                         legend_labels.append(year)
 
+                # Clean grid (minimal)
+                ax.grid(color="gray", linewidth=0.6, alpha=0.7, linestyle="dashed")
 
-                # Styling similar to original boxplot version
-                ax.set_ylabel("")
-                ax.grid(axis="x", alpha=0.4)
-                ax.grid(axis="y", alpha=0.15)
+                # Spines
+                # ax.spines["left"].set_linewidth(0.8)
+                # ax.spines["bottom"].set_linewidth(0.8)
 
-                # Set consistent x-limits per metric (like original)
                 ax.set_xlim(0, self.error_max_values[error])
-                ax.invert_yaxis() 
-                
+                ax.invert_yaxis()
+                ax.set_ylabel("")
+
                 # Column titles (top row)
                 if i == 0:
                     ax.set_title(
@@ -484,7 +508,6 @@ class ResultsPlotter:
         bottom_space = 0.035  # increase if needed
         plt.tight_layout(rect=[0, bottom_space, 1, 1])
 
-
         output_path = self.figures_dir / f"error_yearly_values_per_country.{self.export_format}"
         plt.savefig(output_path)
         plt.close()
@@ -492,7 +515,7 @@ class ResultsPlotter:
         print(f"Saved: {output_path}")
 
     def plot_prices(
-        self, x_length=8, resampling_rule="W", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
+        self, x_length=6, resampling_rule="W", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
     ):
         """Plot benchmark vs simulations per country."""
 
@@ -509,17 +532,27 @@ class ResultsPlotter:
                     series = series.resample(resampling_rule).mean()
 
                 if label == "benchmark":
-                    ax.plot(series.index, series, label="Benchmark", color=self.sim_color[label])
+                    ax.plot(
+                        series.index,
+                        series,
+                        label="Benchmark",
+                        color=self.sim_color[label],
+                        linewidth=0.8,
+                        #alpha=0.8,
+                        #linestyle="dotted",
+                    )
+
                 else:
                     ax.plot(
                         series.index,
                         series,
                         label=label,
                         color=self.sim_color[label],
+                        linewidth=0.8,
                     )
 
                 ax.legend(frameon=True)
-                ax.set_title(f"{country} – Electricity Prices weekly resample", loc="left", fontsize=14, pad=20)
+                ax.set_title(f"{country} – Electricity Prices weekly resample", loc="left", pad=20)
                 ax.set_xlim(left=series.index.min(), right=series.index.max())
                 # ax.set_ylim(bottom=0)
                 ax.set_ylabel("EUR/MWh")
@@ -547,8 +580,8 @@ class ResultsPlotter:
         self.plot_error_by_simulation_and_year_all(x_length=6)
 
         # Plot individual boxplot for simulation per year
-        for error_metric in self.error_list:
-            self.plot_error_by_simulation_and_year(error_metric, x_length=7)
+        # for error_metric in self.error_list:
+        #    self.plot_error_by_simulation_and_year(error_metric, x_length=7)
 
         # Plot price simulations
         self.plot_prices()
