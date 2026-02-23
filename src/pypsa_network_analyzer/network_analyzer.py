@@ -6,6 +6,7 @@ from typing import Optional
 from omegaconf import DictConfig
 import os
 import re
+import matplotlib.dates as mdates
 
 
 
@@ -1000,34 +1001,58 @@ class NetworkAnalyzer:
         
         #  Combine all into one dataframe (columns side-by-side)
         df_combined = pd.concat(dfs, axis=1)
-        
-            
 
+
+        # Extract hydro and pumped hydro storage units
+        hydro_units = n.storage_units[n.storage_units['carrier'] == 'hydro']
+        phs_units = n.storage_units[n.storage_units['carrier'] == 'PHS']  
+        
+        # Add storage unit discharges (hydro + PHS) to generation dispatch
+        hydro_dispatch = n.storage_units_t.p_dispatch[hydro_units.index]
+      
+        phs_net = n.storage_units_t.p[phs_units.index]
+        phs_dispatch = n.storage_units_t.p_dispatch[phs_units.index]
+
+        df_generators_pypsa = n.generators_t.p
+        df_generators_pypsa = df_generators_pypsa.join(hydro_dispatch)
+
+
+            
+        phs_pypsa = {}
         custom_cols = {}
         # Get all unique keys
         keys = [col.split(" ", 1)[0] for col in df_combined.columns]
         keys = list(set(keys))
-        
+
         for key in keys:
             # Construct full column names
             agg_col = f"{key} ('Hydro Pumped Storage', 'Actual Aggregated')"
             cons_col = f"{key} ('Hydro Pumped Storage', 'Actual Consumption')"
             net_col = f"{key} Hydro Pumped Storage Net"
             base_col = f"{key} Hydro Pumped Storage"
-        
+
             # Compute custom column depending on available columns
             if agg_col in df_combined.columns and cons_col in df_combined.columns:
-                custom_cols[key] = df_combined[agg_col] - df_combined[cons_col]
+                custom_cols[key] = (df_combined[agg_col] - df_combined[cons_col]).clip(lower=0)
+                phs_pypsa[f"{key} PHS"] = phs_net[f"{key} PHS"].clip(lower=0)
             elif net_col in df_combined.columns:
-                custom_cols[key] = df_combined[net_col]
+                custom_cols[key] = df_combined[net_col].clip(lower=0)
+                phs_pypsa[f"{key} PHS"] = phs_net[f"{key} PHS"].clip(lower=0)
             elif base_col in df_combined.columns:
-                custom_cols[key] = df_combined[base_col]
-        
+                custom_cols[key] = df_combined[base_col].clip(lower=0)
+                phs_pypsa[f"{key} PHS"] = phs_dispatch[f"{key} PHS"].clip(lower=0)
+            
+                
+
         # Add each custom column to the dataframe
         for key, series in custom_cols.items():
             df_combined[f"{key} Hydro Pumped Storage Custom"] = series
-            
-            
+
+        for key, series in phs_pypsa.items():
+            df_generators_pypsa[f"{key}"] = series
+                
+
+        df_generators_pypsa.fillna(0, inplace=True)
         
         # Step 1: remove columns containing 'Actual Consumption'
         df_combined = df_combined.loc[
@@ -1060,7 +1085,7 @@ class NetworkAnalyzer:
     
         
         
-        df_generators_pypsa = n.generators_t["p"]
+        
                     
             
         mapping = {
@@ -1071,11 +1096,11 @@ class NetworkAnalyzer:
             "0 solar-hsat": "Solar",
             "CCGT": "Fossil Gas",
             "OCGT": "Fossil Gas",
-            #"PHS": "Hydro Pumped Storage Net",         Remove this and add it later
+            "PHS": "Hydro Pumped Storage Custom", 
+            "hydro": "Hydro Water Reservoir",       
             "biomass": "Biomass",
             "coal": "Fossil Hard coal",
             "geothermal": "Geothermal",
-            "hydro": "Hydro Run-of-river and poundage",
             "lignite": "Fossil Brown coal/Lignite",
             "nuclear": "Nuclear",
             "oil": "Fossil Oil",
@@ -1187,11 +1212,11 @@ class NetworkAnalyzer:
             "solar-hsat": "Solar",
             "CCGT": "Fossil Gas",
             "OCGT": "Fossil Gas",
-            "PHS": "Hydro Storage",        
+            "PHS": "Hydro Pumped Storage Custom",        
             "biomass": "Biomass",
             "coal": "Fossil Hard coal",
             "geothermal": "Geothermal",
-            "hydro": "Hydro Run-of-river and poundage",
+            "hydro": "Hydro Water Reservoir",
             "lignite": "Fossil Brown coal/Lignite",
             "nuclear": "Nuclear",
             "oil": "Fossil Oil",
@@ -1258,23 +1283,28 @@ class NetworkAnalyzer:
                 ]
         
                 # Plot
-                ax = df_country.plot.area(
-                    figsize=(12, 6),
-                    title=f"{country} Generation by Technology ({label})",
-                    color=colors
-                )
+                #ax = df_country.plot.area(
+                #    figsize=(12, 6),
+                #    title=f"{country} Generation by Technology ({label})",
+                #    color=colors
+                #)
 
 
-
-
-                ax = df_country.plot.area(
+                # Bar Plot
+                df_plot = df_country
+                df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                ax = df_plot.plot.bar(
                         figsize=(12, 6),
                         title=f"{country} Generation by Technology ({label})",
-                        color=colors
+                        color=colors,
+                        stacked=True,   # keeps technologies stacked
+                        width=1.0      # <-- this removes horizontal gaps
                     )
-
+                
+                ax.set_xlabel("")      # removes x-axis label
+                plt.xticks(rotation=45, ha='right')
                 ax.set_ylabel("Monthly dispatch [GWh]")
-                ax.set_xlabel("Time")
+                
 
                 if country in ylims:
                     ax.set_ylim(0, ylims[country])
@@ -1329,9 +1359,22 @@ class NetworkAnalyzer:
                     color=colors,
                     ylim = [0,100],
                 )
-        
+
+
+                # Bar Plot
+                df_plot = df_country
+                df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                ax = df_plot.plot.bar(
+                        figsize=(12, 6),
+                        title=f"{country} Dispatch Share by Technology ({label})",
+                        color=colors,
+                        stacked=True,   # keeps technologies stacked
+                        width=1.0      # <-- this removes horizontal gaps
+                    )
+                ax.set_xlabel("")      # removes x-axis label
+                plt.xticks(rotation=45, ha='right')
                 ax.set_ylabel("Monthly Dispatch Share [%]")
-                ax.set_xlabel("Time")
+                
                 ax.legend(
                     loc='upper center',        # center horizontally
                     bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
@@ -1375,15 +1418,25 @@ class NetworkAnalyzer:
                 color_dict_new.get(col, "#CCCCCC")
                 for col in df.columns
             ]
-        
-            ax = df.plot.area(
+
+            df_plot = df
+            df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+            ax = df_plot.plot.bar(
                 figsize=(12, 6),
                 title=f"Europe Total Generation by Technology ({label})",
                 color=colors,
+                stacked=True,   # keeps technologies stacked
+                width=1.0       # removes gaps between bars
             )
         
+            #ax = df.plot.area(
+             #   figsize=(12, 6),
+              #  title=f"Europe Total Generation by Technology ({label})",
+               # color=colors,
+            #)
+            plt.xticks(rotation=45, ha='right')
             ax.set_ylabel("Monthly dispatch [TWh]")
-            ax.set_xlabel("Time")
+            ax.set_xlabel("")      # removes x-axis label
 
             if europe_ylim is not None:
                 ax.set_ylim(0, europe_ylim)
@@ -1421,14 +1474,25 @@ class NetworkAnalyzer:
                 for col in df.columns
             ]
         
-            ax = df.plot.area(
+            #ax = df.plot.area(
+             #   figsize=(12, 6),
+             #   title=f"Europe Total Dispatch Share by Technology ({label})",
+             #   color=colors,
+            #)
+            df_plot = df
+            df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+            ax = df_plot.plot.bar(
                 figsize=(12, 6),
                 title=f"Europe Total Dispatch Share by Technology ({label})",
                 color=colors,
+                stacked=True,   # keeps technologies stacked
+                width=1.0       # removes gaps between bars
             )
-        
+
+            plt.xticks(rotation=45, ha='right')
+            ax.set_xlabel("")      # removes x-axis label
             ax.set_ylabel("Monthly Dispatch Share [%]")
-            ax.set_xlabel("Time")
+            
         
             ax.legend(
                 loc='upper center',
@@ -1442,6 +1506,113 @@ class NetworkAnalyzer:
             plot_folder.mkdir(parents=True, exist_ok=True)
             plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_share_monthly.pdf")
             plt.close() 
+
+            
+
+
+
+
+
+        df_generators_pypsa_weekly = df_generators_pypsa.resample('W').sum()/1e3 
+        df_combined_weekly = df_combined.resample('W').sum()/1e3 
+        month_zoom = [2,3,4]
+        months_str = "_".join(str(m) for m in month_zoom)
+
+
+
+        dataframes = {
+            "PyPSA": df_generators_pypsa_weekly,
+            "ENTSO-E": df_combined_weekly
+        }
+
+        # Compute y-limits per country using BOTH datasets
+        ylims = {}
+
+        all_countries = sorted({
+            c.split(" ")[0]
+            for df in [df_generators_pypsa_weekly, df_combined_weekly]
+            for c in df.columns
+        })
+
+        for country in all_countries:
+            max_values = []
+
+            for df in [df_generators_pypsa_weekly, df_combined_weekly]:
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                df_country = df[country_cols]
+
+                if not df_country.empty:
+                    # stacked total for area plot
+                    max_values.append(df_country.sum(axis=1).max())
+
+            if max_values:
+                ylims[country] = max(max_values)
+
+        
+        for label, df in dataframes.items():
+        
+            # Get all unique countries/keys
+            countries = sorted({c.split(" ")[0] for c in df.columns})
+        
+            for country in countries:
+                # Select columns for this country
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                df_country = df[country_cols]
+        
+                if df_country.empty:
+                    continue
+        
+                # Build color list
+                colors = [
+                    color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                    for c in country_cols
+                ]
+        
+                # Area Plot
+                #ax = df_country[df_country.index.month.isin(month_zoom)].plot.area(
+                 #       figsize=(12, 6),
+                  #      title=f"{country} Generation by Technology ({label})",
+                   #     color=colors
+                    #)
+                
+                # Bar Plot
+                df_plot = df_country[df_country.index.month.isin(month_zoom)]
+                df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                ax = df_plot.plot.bar(
+                        figsize=(12, 6),
+                        title=f"{country} Generation by Technology ({label})",
+                        color=colors,
+                        stacked=True,   # keeps technologies stacked
+                        width=1.0      # <-- this removes horizontal gaps
+                    )
+                
+                ax.set_ylabel("Weekly dispatch [GWh]")
+                plt.xticks(rotation=45, ha='right')
+                ax.set_xlabel("")      # removes x-axis label
+             
+                
+
+
+                if country in ylims:
+                    ax.set_ylim(0, ylims[country])
+        
+        
+                ax.legend(
+                    loc='upper center',        # center horizontally
+                    bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+                    ncol=4,                    # number of columns in legend
+                    fontsize=10,
+                )
+                #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                plt.tight_layout()
+                plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                plot_folder.mkdir(parents=True, exist_ok=True)
+                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_weekly_monthzoom_{months_str}.pdf")
+                plt.close()
+            
+
+
+
         
     
     def plot_all_figures(self):
@@ -1452,18 +1623,18 @@ class NetworkAnalyzer:
             bus_folder.mkdir(parents=True, exist_ok=True)
 
             # Plot installed capacity
-            self.plot_installed_capacity(bus)  # Plot installed capacity
-            self.plot_load(bus)  # Plot electric load
-            self.plot_generation_dispatch_annual(bus)  # Plot generation dispatch annual
-            self.plot_electricity_price(bus)  # Plot electricity price
-            self.plot_total_dispatch(bus)  # Plot total dispatch
-            self.plot_generation_dispatch_conventional(bus)  # Plot fossil dispatch
-            self.plot_co2_emissions_per_bus(bus)  # Plot CO2 emissions
-            self.plot_generation_mix_annual(bus)  # Plot annual generation mix
-            self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
-            self.plot_hydro_analysis(bus)  # Plot hydro analysis
+            #self.plot_installed_capacity(bus)  # Plot installed capacity
+            #self.plot_load(bus)  # Plot electric load
+            #self.plot_generation_dispatch_annual(bus)  # Plot generation dispatch annual
+            #self.plot_electricity_price(bus)  # Plot electricity price
+            #self.plot_total_dispatch(bus)  # Plot total dispatch
+            #self.plot_generation_dispatch_conventional(bus)  # Plot fossil dispatch
+            #self.plot_co2_emissions_per_bus(bus)  # Plot CO2 emissions
+            #self.plot_generation_mix_annual(bus)  # Plot annual generation mix
+            #self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
+            #self.plot_hydro_analysis(bus)  # Plot hydro analysis
             #self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
-            self.plot_total_dispatch_all_buses()
+            #self.plot_total_dispatch_all_buses()
         self.plot_EUR_country_generation_function()
 
        
