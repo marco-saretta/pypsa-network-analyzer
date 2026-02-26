@@ -956,7 +956,13 @@ class NetworkAnalyzer:
 
     
     def plot_EUR_country_generation_function(self):
-    
+        import matplotlib.dates as mdates
+        import numpy as np
+        cap_font = 20
+        week_plot = True
+        month_plot = False
+        share_plot = False
+        europe_plot = False
         #print("Running EUR_total_generation_function_monthly...")
         n = self.n
         # --------------------------------------------------
@@ -1146,6 +1152,7 @@ class NetworkAnalyzer:
         # Monthly dispatch and MWh to GWh 
         df_generators_pypsa_monthly = df_generators_pypsa.resample('ME').sum()/1e3 
         df_combined_monthly = df_combined.resample('ME').sum()/1e3 
+        df_difference_monthly = df_combined_monthly-df_generators_pypsa_monthly
         
         
         
@@ -1232,383 +1239,598 @@ class NetworkAnalyzer:
         
 
 
+        if month_plot == True:
+            # Put both dataframes in a dict so we can label them nicely
+            dataframes = {
+                "PyPSA": df_generators_pypsa_monthly,
+                "ENTSO-E": df_combined_monthly,
+                "Difference": df_difference_monthly
+            }
 
-        # Put both dataframes in a dict so we can label them nicely
-        dataframes = {
-            "PyPSA": df_generators_pypsa_monthly,
-            "ENTSO-E": df_combined_monthly
-        }
+            # Compute y-limits per country using BOTH datasets
+            ylims = {}
 
-        # Compute y-limits per country using BOTH datasets
-        ylims = {}
+            all_countries = sorted({
+                c.split(" ")[0]
+                for df in [df_generators_pypsa_monthly, df_combined_monthly]
+                for c in df.columns
+            })
 
-        all_countries = sorted({
-            c.split(" ")[0]
-            for df in [df_generators_pypsa_monthly, df_combined_monthly]
-            for c in df.columns
-        })
+            for country in all_countries:
+                max_values = []
 
-        for country in all_countries:
-            max_values = []
+                for df in [df_generators_pypsa_monthly, df_combined_monthly]:
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
 
-            for df in [df_generators_pypsa_monthly, df_combined_monthly]:
-                country_cols = [c for c in df.columns if c.startswith(country + " ")]
-                df_country = df[country_cols]
+                    if not df_country.empty:
+                        # stacked total for area plot
+                        max_values.append(df_country.sum(axis=1).max())
 
-                if not df_country.empty:
-                    # stacked total for area plot
-                    max_values.append(df_country.sum(axis=1).max())
-
-            if max_values:
-                ylims[country] = max(max_values)
-
-        
-        for label, df in dataframes.items():
-        
-            # Get all unique countries/keys
-            countries = sorted({c.split(" ")[0] for c in df.columns})
-        
-            for country in countries:
-                # Select columns for this country
-                country_cols = [c for c in df.columns if c.startswith(country + " ")]
-                df_country = df[country_cols]
-        
-                if df_country.empty:
-                    continue
-        
-                # Build color list
-                colors = [
-                    color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
-                    for c in country_cols
-                ]
-        
-                # Plot
-                #ax = df_country.plot.area(
-                #    figsize=(12, 6),
-                #    title=f"{country} Generation by Technology ({label})",
-                #    color=colors
-                #)
-
-
-                # Bar Plot
-                df_plot = df_country
-                df_plot.index = df_plot.index.strftime('%Y-%m-%d')
-                ax = df_plot.plot.bar(
-                        figsize=(12, 6),
-                        title=f"{country} Generation by Technology ({label})",
-                        color=colors,
-                        stacked=True,   # keeps technologies stacked
-                        width=1.0      # <-- this removes horizontal gaps
-                    )
-                
-                ax.set_xlabel("")      # removes x-axis label
-                plt.xticks(rotation=45, ha='right')
-                ax.set_ylabel("Monthly dispatch [GWh]")
-                
-
-                if country in ylims:
-                    ax.set_ylim(0, ylims[country])
-        
-        
-                ax.legend(
-                    loc='upper center',        # center horizontally
-                    bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
-                    ncol=4,                    # number of columns in legend
-                    fontsize=10,
-                )
-                #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
-                plt.tight_layout()
-                plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
-                plot_folder.mkdir(parents=True, exist_ok=True)
-                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_monthly.pdf")
-                plt.close()
-                
-                
-                
-                
-                
-        # Put both dataframes in a dict so we can label them nicely
-        dataframes = {
-            "PyPSA": df_generators_pypsa_monthly_percent,
-            "ENTSO-E": df_combined_monthly_percent
-        }
-        
-        for label, df in dataframes.items():
-        
-            # Get all unique countries/keys
-            countries = sorted({c.split(" ")[0] for c in df.columns})
-        
-            for country in countries:
-                # Select columns for this country
-                country_cols = [c for c in df.columns if c.startswith(country + " ")]
-                df_country = df[country_cols]
-        
-                if df_country.empty:
-                    continue
-        
-                # Build color list
-                colors = [
-                    color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
-                    for c in country_cols
-                ]
-        
-                # Plot
-                ax = df_country.plot.area(
-                    figsize=(12, 6),
-                    title=f"{country} Dispatch Share by Technology ({label})",
-                    color=colors,
-                    ylim = [0,100],
-                )
-
-
-                # Bar Plot
-                df_plot = df_country
-                df_plot.index = df_plot.index.strftime('%Y-%m-%d')
-                ax = df_plot.plot.bar(
-                        figsize=(12, 6),
-                        title=f"{country} Dispatch Share by Technology ({label})",
-                        color=colors,
-                        stacked=True,   # keeps technologies stacked
-                        width=1.0      # <-- this removes horizontal gaps
-                    )
-                ax.set_xlabel("")      # removes x-axis label
-                plt.xticks(rotation=45, ha='right')
-                ax.set_ylabel("Monthly Dispatch Share [%]")
-                
-                ax.legend(
-                    loc='upper center',        # center horizontally
-                    bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
-                    ncol=4,                    # number of columns in legend
-                    fontsize=10,
-                )
-                #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
-                plt.tight_layout()
-                plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
-                plot_folder.mkdir(parents=True, exist_ok=True)
-                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_share_monthly.pdf")
-                plt.close()
-                
-            
-            
-            
-        # Put aggregated Europe dataframes in dict
-        # TWh
-        dataframes_europe = {
-            "PyPSA": df_generators_pypsa_europe/1e3,
-            "ENTSO-E": df_combined_europe/1e3
-        }
-
-        # Compute shared y-limit for Europe using BOTH datasets (already in TWh)
-        max_values = []
-
-        for df in [df_generators_pypsa_europe/1e3, df_combined_europe/1e3]:
-            if not df.empty:
-                max_values.append(df.sum(axis=1).max())
-
-        europe_ylim = max(max_values) if max_values else None
-
-        
-        for label, df in dataframes_europe.items():
-        
-            if df.empty:
-                continue
-        
-            # Build color list based on technology names
-            colors = [
-                color_dict_new.get(col, "#CCCCCC")
-                for col in df.columns
-            ]
-
-            df_plot = df
-            df_plot.index = df_plot.index.strftime('%Y-%m-%d')
-            ax = df_plot.plot.bar(
-                figsize=(12, 6),
-                title=f"Europe Total Generation by Technology ({label})",
-                color=colors,
-                stacked=True,   # keeps technologies stacked
-                width=1.0       # removes gaps between bars
-            )
-        
-            #ax = df.plot.area(
-             #   figsize=(12, 6),
-              #  title=f"Europe Total Generation by Technology ({label})",
-               # color=colors,
-            #)
-            plt.xticks(rotation=45, ha='right')
-            ax.set_ylabel("Monthly dispatch [TWh]")
-            ax.set_xlabel("")      # removes x-axis label
-
-            if europe_ylim is not None:
-                ax.set_ylim(0, europe_ylim)
-
-        
-            ax.legend(
-                loc='upper center',
-                bbox_to_anchor=(0.5, -0.15),
-                ncol=4,
-                fontsize=10,
-            )
-        
-            plt.tight_layout()
-            plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
-            plot_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_generation_monthly.pdf")
-            plt.close()
-            
-            
-            
-        # Put both dataframes in a dict so we can label them nicely
-        dataframes_europe = {
-            "PyPSA": df_generators_pypsa_europe_percent,
-            "ENTSO-E": df_combined_europe_percent
-        }
-        
-        for label, df in dataframes_europe.items():
-        
-            if df.empty:
-                continue
-        
-            # Build color list based on technology names
-            colors = [
-                color_dict_new.get(col, "#CCCCCC")
-                for col in df.columns
-            ]
-        
-            #ax = df.plot.area(
-             #   figsize=(12, 6),
-             #   title=f"Europe Total Dispatch Share by Technology ({label})",
-             #   color=colors,
-            #)
-            df_plot = df
-            df_plot.index = df_plot.index.strftime('%Y-%m-%d')
-            ax = df_plot.plot.bar(
-                figsize=(12, 6),
-                title=f"Europe Total Dispatch Share by Technology ({label})",
-                color=colors,
-                stacked=True,   # keeps technologies stacked
-                width=1.0       # removes gaps between bars
-            )
-
-            plt.xticks(rotation=45, ha='right')
-            ax.set_xlabel("")      # removes x-axis label
-            ax.set_ylabel("Monthly Dispatch Share [%]")
-            
-        
-            ax.legend(
-                loc='upper center',
-                bbox_to_anchor=(0.5, -0.15),
-                ncol=4,
-                fontsize=10,
-            )
-        
-            plt.tight_layout()
-            plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
-            plot_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_share_monthly.pdf")
-            plt.close() 
+                if max_values:
+                    ylims[country] = max(max_values)
 
             
-
-
-
-
-
-        df_generators_pypsa_weekly = df_generators_pypsa.resample('W').sum()/1e3 
-        df_combined_weekly = df_combined.resample('W').sum()/1e3 
-        month_zoom = [2,3,4]
-        months_str = "_".join(str(m) for m in month_zoom)
-
-
-
-        dataframes = {
-            "PyPSA": df_generators_pypsa_weekly,
-            "ENTSO-E": df_combined_weekly
-        }
-
-        # Compute y-limits per country using BOTH datasets
-        ylims = {}
-
-        all_countries = sorted({
-            c.split(" ")[0]
-            for df in [df_generators_pypsa_weekly, df_combined_weekly]
-            for c in df.columns
-        })
-
-        for country in all_countries:
-            max_values = []
-
-            for df in [df_generators_pypsa_weekly, df_combined_weekly]:
-                country_cols = [c for c in df.columns if c.startswith(country + " ")]
-                df_country = df[country_cols]
-
-                if not df_country.empty:
-                    # stacked total for area plot
-                    max_values.append(df_country.sum(axis=1).max())
-
-            if max_values:
-                ylims[country] = max(max_values)
-
-        
-        for label, df in dataframes.items():
-        
-            # Get all unique countries/keys
-            countries = sorted({c.split(" ")[0] for c in df.columns})
-        
-            for country in countries:
-                # Select columns for this country
-                country_cols = [c for c in df.columns if c.startswith(country + " ")]
-                df_country = df[country_cols]
-        
-                if df_country.empty:
-                    continue
-        
-                # Build color list
-                colors = [
-                    color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
-                    for c in country_cols
-                ]
-        
-                # Area Plot
-                #ax = df_country[df_country.index.month.isin(month_zoom)].plot.area(
-                 #       figsize=(12, 6),
-                  #      title=f"{country} Generation by Technology ({label})",
-                   #     color=colors
+            for label, df in dataframes.items():
+            
+                # Get all unique countries/keys
+                countries = sorted({c.split(" ")[0] for c in df.columns})
+            
+                for country in countries:
+                    # Select columns for this country
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+            
+                    if df_country.empty:
+                        continue
+            
+                    # Build color list
+                    colors = [
+                        color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                        for c in country_cols
+                    ]
+            
+                    # Plot
+                    #ax = df_country.plot.area(
+                    #    figsize=(12, 6),
+                    #    title=f"{country} Generation by Technology ({label})",
+                    #    color=colors
                     #)
+
+
+                    # Bar Plot
+                    df_plot = df_country
+                    df_plot.index = df_plot.index.strftime('%Y-%m')
+                    ax = df_plot.plot.bar(
+                            figsize=(12, 6),
+                            #title=f"{country} Generation by Technology ({label})",
+                            color=colors,
+                            stacked=True,   # keeps technologies stacked
+                            width=1.0      # <-- this removes horizontal gaps
+                        )
+                    
+                    ax.set_xlabel("")      # removes x-axis label
+                    plt.xticks(rotation=45, ha='right')
+                    ax.set_ylabel("Monthly dispatch [GWh]", fontsize=cap_font)
+                    ax.tick_params(axis='both', labelsize=cap_font)
+                    # Grid: horizontal lines only
+                    ax.grid(False)
+                    ax.yaxis.grid(True, linestyle='-', linewidth=0.8)
+                    ax.xaxis.grid(False)
+                    
+
+                    #if country in ylims:
+                    #    ax.set_ylim(0, ylims[country])
+
+                    if label != "Difference":
+                        if country in ylims:
+                            ax.set_ylim(0, ylims[country])
+                        # Remove legend if it exists
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+
+                        ax.tick_params(axis='x', which='both', labelbottom=False)
+                    else:
+                        # Let matplotlib choose limits automatically
+                        ax.autoscale(enable=True, axis='y')
+                        plt.tight_layout()
+                    
+                        
+                        
+                    # Get legend items WITHOUT plotting legend on main axis
+                        handles, labels_legend = ax.get_legend_handles_labels()
+
+                        # --- Create separate legend figure ---
+                        fig_legend = plt.figure(figsize=(12, 3))
+                        fig_legend.legend(
+                            handles,
+                            labels_legend,
+                            loc='center',
+                            ncol=2,
+                            fontsize=cap_font,
+                        )
+
+                        fig_legend.tight_layout()
+
+                        legend_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "legend"
+                        legend_folder.mkdir(parents=True, exist_ok=True)
+
+                        fig_legend.savefig(legend_folder / f"{country}_legend.pdf")
+                        plt.close(fig_legend)
+
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+            
+            
+                    
+                    #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_monthly.pdf")
+                    plt.close()
+                    
+                    
+                    
+                    
+            if share_plot == True:        
+                # Put both dataframes in a dict so we can label them nicely
+                dataframes = {
+                    "PyPSA": df_generators_pypsa_monthly_percent,
+                    "ENTSO-E": df_combined_monthly_percent
+                }
                 
-                # Bar Plot
-                df_plot = df_country[df_country.index.month.isin(month_zoom)]
+                for label, df in dataframes.items():
+                
+                    # Get all unique countries/keys
+                    countries = sorted({c.split(" ")[0] for c in df.columns})
+                
+                    for country in countries:
+                        # Select columns for this country
+                        country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                        df_country = df[country_cols]
+                
+                        if df_country.empty:
+                            continue
+                
+                        # Build color list
+                        colors = [
+                            color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                            for c in country_cols
+                        ]
+                
+                        # Plot
+                        ax = df_country.plot.area(
+                            figsize=(12, 6),
+                            title=f"{country} Dispatch Share by Technology ({label})",
+                            color=colors,
+                            ylim = [0,100],
+                        )
+
+
+                        # Bar Plot
+                        df_plot = df_country
+                        df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                        ax = df_plot.plot.bar(
+                                figsize=(12, 6),
+                                title=f"{country} Dispatch Share by Technology ({label})",
+                                color=colors,
+                                stacked=True,   # keeps technologies stacked
+                                width=1.0      # <-- this removes horizontal gaps
+                            )
+                        ax.set_xlabel("")      # removes x-axis label
+                        plt.xticks(rotation=45, ha='right')
+                        ax.set_ylabel("Monthly Dispatch Share [%]")
+                        
+                        ax.legend(
+                            loc='upper center',        # center horizontally
+                            bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+                            ncol=4,                    # number of columns in legend
+                            fontsize=10,
+                        )
+                        #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                        plt.tight_layout()
+                        plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
+                        plot_folder.mkdir(parents=True, exist_ok=True)
+                        plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_share_monthly.pdf")
+                        plt.close()
+                
+            
+            
+        if europe_plot == True:    
+            # Put aggregated Europe dataframes in dict
+            # TWh
+            dataframes_europe = {
+                "PyPSA": df_generators_pypsa_europe/1e3,
+                "ENTSO-E": df_combined_europe/1e3
+            }
+
+            # Compute shared y-limit for Europe using BOTH datasets (already in TWh)
+            max_values = []
+
+            for df in [df_generators_pypsa_europe/1e3, df_combined_europe/1e3]:
+                if not df.empty:
+                    max_values.append(df.sum(axis=1).max())
+
+            europe_ylim = max(max_values) if max_values else None
+
+            
+            for label, df in dataframes_europe.items():
+            
+                if df.empty:
+                    continue
+            
+                # Build color list based on technology names
+                colors = [
+                    color_dict_new.get(col, "#CCCCCC")
+                    for col in df.columns
+                ]
+
+                df_plot = df
                 df_plot.index = df_plot.index.strftime('%Y-%m-%d')
                 ax = df_plot.plot.bar(
-                        figsize=(12, 6),
-                        title=f"{country} Generation by Technology ({label})",
-                        color=colors,
-                        stacked=True,   # keeps technologies stacked
-                        width=1.0      # <-- this removes horizontal gaps
-                    )
-                
-                ax.set_ylabel("Weekly dispatch [GWh]")
+                    figsize=(12, 6),
+                    title=f"Europe Total Generation by Technology ({label})",
+                    color=colors,
+                    stacked=True,   # keeps technologies stacked
+                    width=1.0       # removes gaps between bars
+                )
+            
+                #ax = df.plot.area(
+                #   figsize=(12, 6),
+                #  title=f"Europe Total Generation by Technology ({label})",
+                # color=colors,
+                #)
                 plt.xticks(rotation=45, ha='right')
+                ax.set_ylabel("Monthly dispatch [TWh]")
                 ax.set_xlabel("")      # removes x-axis label
-             
-                
 
+                if europe_ylim is not None:
+                    ax.set_ylim(0, europe_ylim)
 
-                if country in ylims:
-                    ax.set_ylim(0, ylims[country])
-        
-        
+            
                 ax.legend(
-                    loc='upper center',        # center horizontally
-                    bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
-                    ncol=4,                    # number of columns in legend
+                    loc='upper center',
+                    bbox_to_anchor=(0.5, -0.15),
+                    ncol=4,
                     fontsize=10,
                 )
-                #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+            
                 plt.tight_layout()
                 plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
                 plot_folder.mkdir(parents=True, exist_ok=True)
-                plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_weekly_monthzoom_{months_str}.pdf")
+                plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_generation_monthly.pdf")
                 plt.close()
+                
+                
+            if share_plot == True:    
+                # Put both dataframes in a dict so we can label them nicely
+                dataframes_europe = {
+                    "PyPSA": df_generators_pypsa_europe_percent,
+                    "ENTSO-E": df_combined_europe_percent
+                }
+                
+                for label, df in dataframes_europe.items():
+                
+                    if df.empty:
+                        continue
+                
+                    # Build color list based on technology names
+                    colors = [
+                        color_dict_new.get(col, "#CCCCCC")
+                        for col in df.columns
+                    ]
+                
+                    #ax = df.plot.area(
+                    #   figsize=(12, 6),
+                    #   title=f"Europe Total Dispatch Share by Technology ({label})",
+                    #   color=colors,
+                    #)
+                    df_plot = df
+                    df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                    ax = df_plot.plot.bar(
+                        figsize=(12, 6),
+                        title=f"Europe Total Dispatch Share by Technology ({label})",
+                        color=colors,
+                        stacked=True,   # keeps technologies stacked
+                        width=1.0       # removes gaps between bars
+                    )
+
+                    plt.xticks(rotation=45, ha='right')
+                    ax.set_xlabel("")      # removes x-axis label
+                    ax.set_ylabel("Monthly Dispatch Share [%]")
+                    
+                
+                    ax.legend(
+                        loc='upper center',
+                        bbox_to_anchor=(0.5, -0.15),
+                        ncol=4,
+                        fontsize=10,
+                    )
+                
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "share"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_share_monthly.pdf")
+                    plt.close() 
+
+            
+
+
+
+
+        if week_plot == True:
+            df_generators_pypsa_weekly = df_generators_pypsa.resample('W').sum()/1e3 
+            df_combined_weekly = df_combined.resample('W').sum()/1e3 
+            month_zoom = [2,3,4]
+            months_str = "_".join(str(m) for m in month_zoom)
+
+
+
+            dataframes = {
+                "PyPSA": df_generators_pypsa_weekly,
+                "ENTSO-E": df_combined_weekly
+            }
+
+            # Compute y-limits per country using BOTH datasets
+            ylims = {}
+
+            all_countries = sorted({
+                c.split(" ")[0]
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]
+                for c in df.columns
+            })
+
+            for country in all_countries:
+                max_values = []
+
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]:
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+
+                    if not df_country.empty:
+                        # stacked total for area plot
+                        max_values.append(df_country.sum(axis=1).max())
+
+                if max_values:
+                    ylims[country] = max(max_values)
+
+            
+            for label, df in dataframes.items():
+            
+                # Get all unique countries/keys
+                countries = sorted({c.split(" ")[0] for c in df.columns})
+            
+                for country in countries:
+                    # Select columns for this country
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+            
+                    if df_country.empty:
+                        continue
+            
+                    # Build color list
+                    colors = [
+                        color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                        for c in country_cols
+                    ]
+            
+                    # Area Plot
+                    #ax = df_country[df_country.index.month.isin(month_zoom)].plot.area(
+                    #       figsize=(12, 6),
+                    #      title=f"{country} Generation by Technology ({label})",
+                    #     color=colors
+                        #)
+                    
+                    # Bar Plot
+                    df_plot = df_country[df_country.index.month.isin(month_zoom)]
+                    df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                    ax = df_plot.plot.bar(
+                            figsize=(12, 6),
+                            title=f"{country} Generation by Technology ({label})",
+                            color=colors,
+                            stacked=True,   # keeps technologies stacked
+                            width=1.0      # <-- this removes horizontal gaps
+                        )
+                    
+                    ax.set_ylabel("Weekly dispatch [GWh]")
+                    plt.xticks(rotation=45, ha='right')
+                    ax.set_xlabel("")      # removes x-axis label
+                
+                    
+
+
+                    if country in ylims:
+                        ax.set_ylim(0, ylims[country])
+            
+            
+                    ax.legend(
+                        loc='upper center',        # center horizontally
+                        bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+                        ncol=4,                    # number of columns in legend
+                        fontsize=10,
+                    )
+                    #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_weekly_monthzoom_{months_str}.pdf")
+                    plt.close()
+
+
+            "Weekly plot"
+            df_generators_pypsa_weekly = df_generators_pypsa.resample('W').sum()/1e3 
+            df_combined_weekly = df_combined.resample('W').sum()/1e3 
+            df_difference_weekly = df_combined_weekly-df_generators_pypsa_weekly
+
+
+            # Put both dataframes in a dict so we can label them nicely
+            dataframes = {
+                "PyPSA": df_generators_pypsa_weekly,
+                "ENTSO-E": df_combined_weekly,
+                "Difference": df_difference_weekly
+            }
+
+            # Compute y-limits per country using BOTH datasets
+            ylims = {}
+
+            all_countries = sorted({
+                c.split(" ")[0]
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]
+                for c in df.columns
+            })
+
+            for country in all_countries:
+                max_values = []
+
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]:
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+
+                    if not df_country.empty:
+                        # stacked total for area plot
+                        max_values.append(df_country.sum(axis=1).max())
+
+                if max_values:
+                    ylims[country] = max(max_values)
+
+            
+            for label, df in dataframes.items():
+            
+                # Get all unique countries/keys
+                countries = sorted({c.split(" ")[0] for c in df.columns})
+            
+                for country in countries:
+                    # Select columns for this country
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+            
+                    if df_country.empty:
+                        continue
+            
+                    # Build color list
+                    colors = [
+                        color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                        for c in country_cols
+                    ]
+            
+                    # Plot
+                    #ax = df_country.plot.area(
+                    #    figsize=(12, 6),
+                    #    title=f"{country} Generation by Technology ({label})",
+                    #    color=colors
+                    #)
+
+
+                    # Bar Plot
+                    #df_plot = df_country
+                    #df_plot.index = df_plot.index.strftime('%Y-%m')
+                    #ax = df_plot.plot.bar(
+                    #        figsize=(12, 6),
+                    #        #title=f"{country} Generation by Technology ({label})",
+                    #        color=colors,
+                    #        stacked=True,   # keeps technologies stacked
+                    #        width=1.0      # <-- this removes horizontal gaps
+                    #    )
+                    
+                    #ax.set_xlabel("")      # removes x-axis label
+                    #plt.xticks(rotation=45, ha='right')
+                    #ax.set_ylabel("Weekly dispatch [GWh]", fontsize=cap_font)
+                    #ax.tick_params(axis='both', labelsize=cap_font)
+                    # Grid: horizontal lines only
+                    #ax.grid(False)
+                    #ax.yaxis.grid(True, linestyle='-', linewidth=0.8)
+                    #ax.xaxis.grid(False)
+
+                    df_plot = df_country.copy()
+
+                    # Keep original datetime separately
+                    dates = pd.to_datetime(df_plot.index)
+
+                    # Force categorical positions
+                    df_plot.index = range(len(df_plot))
+
+                    ax = df_plot.plot.bar(
+                        figsize=(12, 6),
+                        color=colors,
+                        stacked=True,
+                        width=1.0
+                    )
+
+                    # ---- Month change detection (using original dates) ----
+                    month_starts = dates.to_series().dt.to_period("M").ne(
+                        dates.to_series().dt.to_period("M").shift()
+                    )
+
+                    tick_positions = np.where(month_starts)[0]
+                    tick_labels = dates[month_starts].strftime('%Y-%m')
+
+                    ax.set_xticks(tick_positions)
+                    ax.set_xticklabels(tick_labels, rotation=45, ha='right')
+
+                    ax.set_xlabel("")
+                    ax.set_ylabel("Weekly dispatch [GWh]", fontsize=cap_font)
+                    ax.tick_params(axis='both', labelsize=cap_font)
+
+                    ax.grid(False)
+                    ax.yaxis.grid(True, linestyle='-', linewidth=0.8)
+                    ax.xaxis.grid(False)
+
+
+
+
+
+                    #if country in ylims:
+                    #    ax.set_ylim(0, ylims[country])
+
+                    if label != "Difference":
+                        if country in ylims:
+                            ax.set_ylim(0, ylims[country])
+                        # Remove legend if it exists
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+
+                        ax.tick_params(axis='x', which='both', labelbottom=False)
+                    else:
+                        # Let matplotlib choose limits automatically
+                        ax.autoscale(enable=True, axis='y')
+                        ax.set_ylabel("Weekly dispatch difference [GWh]", fontsize=cap_font)
+                        plt.tight_layout()
+                    
+                        
+                        
+                    # Get legend items WITHOUT plotting legend on main axis
+                        handles, labels_legend = ax.get_legend_handles_labels()
+
+                        # --- Create separate legend figure ---
+                        fig_legend = plt.figure(figsize=(12, 3))
+                        fig_legend.legend(
+                            handles,
+                            labels_legend,
+                            loc='center',
+                            ncol=2,
+                            fontsize=cap_font,
+                        )
+
+                        fig_legend.tight_layout()
+
+                        legend_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "legend"
+                        legend_folder.mkdir(parents=True, exist_ok=True)
+
+                        fig_legend.savefig(legend_folder / f"{country}_legend.pdf")
+                        plt.close(fig_legend)
+
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+            
+            
+                    
+                    #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_weekly.pdf")
+                    plt.close()
             
 
 
