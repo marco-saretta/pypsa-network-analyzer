@@ -15,9 +15,9 @@ class ResultsPlotter:
         # Config and directories
         self.cfg = cfg
         self.root_dir = Path(cfg.paths.root)
-        self.data_dir = self.root_dir / "data"
-        self.results_concat_dir = self.root_dir / "results_concat"
-        self.figures_dir = self.root_dir / "figures_paper"
+        self.data_dir = Path(cfg.paths.data)
+        self.results_concat_dir = Path(cfg.paths.results_concat)
+        self.figures_dir = Path(cfg.paths.figures)
         self.figures_dir.mkdir(exist_ok=True)
 
         # Configuration
@@ -351,6 +351,147 @@ class ResultsPlotter:
         plt.close()
         print(f"Saved: {output_path}")
 
+    def plot_yearly_values_per_country(self, x_length=8):
+        """
+        Create grid of scatter plots showing yearly values per country.
+        Same layout as boxplot_per_country, but instead of boxplots
+        we plot one dot per year (x = error value, y = country).
+        """
+
+        fig, axes = plt.subplots(
+            nrows=len(self.sim_labels),
+            ncols=len(self.error_list),
+            figsize=(x_length, x_length * self.phi),
+            sharex="col",
+        )
+
+        # Ensure axes is 2D even if only 1 sim or 1 metric
+        if len(self.sim_labels) == 1 and len(self.error_list) == 1:
+            axes = [[axes]]
+        elif len(self.sim_labels) == 1:
+            axes = [axes]
+        elif len(self.error_list) == 1:
+            axes = [[ax] for ax in axes]
+
+        legend_handles = []
+        legend_labels = []
+
+        for i, sim_label in enumerate(self.sim_labels):
+            for j, error in enumerate(self.error_list):
+                df = self.scores_dict[sim_label][error]
+
+                # rows = years, columns = countries
+                df_long = df.reset_index(names="year").melt(
+                    id_vars="year",
+                    var_name="country",
+                    value_name=error,
+                )
+
+                df_long["year"] = df_long["year"].astype(str)
+                year_order = sorted(df_long["year"].unique())
+
+                # Same year color logic as other year-based plots
+                # Palette options: mako, blues, coolwarm, crest, mako, rocket_r, rocket
+                palette = sns.color_palette("coolwarm", n_colors=len(year_order))
+                year_color_map = dict(zip(year_order, palette))
+
+                ax = axes[i][j]
+
+                # Plot one dot per (country, year)
+                for year in year_order:
+                    subset = df_long[df_long["year"] == year]
+
+                    sc = ax.scatter(
+                        subset[error],
+                        subset["country"],
+                        color=year_color_map[year],
+                        s=40,
+                        edgecolor="white",
+                        linewidth=0.4,
+                        alpha=0.9,
+                        label=year if (i == 0 and j == 0) else None,
+                        zorder=3,
+                    )
+
+                    # Collect legend entries only once
+                    if i == 0 and j == 0:
+                        legend_handles.append(sc)
+                        legend_labels.append(year)
+
+                # Clean grid (minimal)
+                ax.grid(color="gray", linewidth=0.6, alpha=0.7, linestyle="dashed")
+
+                # Spines
+                # ax.spines["left"].set_linewidth(0.8)
+                # ax.spines["bottom"].set_linewidth(0.8)
+
+                ax.set_xlim(0, self.error_max_values[error])
+                ax.invert_yaxis()
+                ax.set_ylabel("")
+
+                # Column titles (top row)
+                if i == 0:
+                    ax.set_title(
+                        f"{error.upper()} ({self.error_units[error]})",
+                        fontsize=11,
+                        pad=10,
+                    )
+
+                # Row labels (left side)
+                if j == 0:
+                    ax.text(
+                        -0.25,
+                        0.5,
+                        sim_label,
+                        transform=ax.transAxes,
+                        fontsize=11,
+                        va="center",
+                        ha="right",
+                        rotation=90,
+                    )
+
+                # Move x-axis to top like original boxplot layout
+                if i == 0:
+                    ax.xaxis.tick_top()
+                    ax.tick_params(
+                        axis="x",
+                        which="both",
+                        top=True,
+                        labeltop=True,
+                        bottom=False,
+                        labelbottom=False,
+                    )
+                else:
+                    ax.tick_params(
+                        axis="x",
+                        which="both",
+                        top=False,
+                        labeltop=False,
+                        bottom=False,
+                        labelbottom=False,
+                    )
+
+        # Add one single legend below entire figure
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            title="Year",
+            loc="lower center",
+            ncol=len(legend_labels),
+            frameon=True,
+            bbox_to_anchor=(0.5, 0),
+        )
+
+        # ---- Add buffer space at bottom for legend ----
+        bottom_space = 0.035  # increase if needed
+        plt.tight_layout(rect=[0, bottom_space, 1, 1])
+
+        output_path = self.figures_dir / f"error_yearly_values_per_country.{self.export_format}"
+        plt.savefig(output_path)
+        plt.close()
+
+        print(f"Saved: {output_path}")
+
     def plot_prices(
         self, x_length=8, resampling_rule="W", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
     ):
@@ -399,6 +540,9 @@ class ResultsPlotter:
 
         # Print boxplot per country across sims
         self.plot_boxplot_per_country()
+
+        # Print scatter plot per country across sims
+        self.plot_yearly_values_per_country()
 
         # Print single boxplot for error metrics
         self.plot_error_by_simulation_and_year_all(x_length=6)

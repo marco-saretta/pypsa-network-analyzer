@@ -32,8 +32,8 @@ class NetworkAnalyzer:
         self.network_file_path = Path(network_file)
 
         # Set input data directory
-        self.data_dir = self.root_dir / "data"
-        network_files_data_dir = self.data_dir / "network_files"
+        self.data_dir = Path(self.config.paths.data)
+        network_files_data_dir = Path(self.config.paths.network_files_data)
         self.network_file_dir = network_files_data_dir / self.network_file_path
 
         # Check if network file exists
@@ -47,16 +47,17 @@ class NetworkAnalyzer:
             self.logger.error(msg)
             raise ValueError(msg)
 
-        # Directories creation
-        self.results_dir = self.root_dir / "results"
+        # Directories creation (use values from config)
+        self.results_dir = Path(self.config.paths.results)
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
         network_stem = self.network_file_path.stem
         self.network_file_res_dir = self.results_dir / network_stem
         self.network_file_res_dir.mkdir(parents=True, exist_ok=True)
 
-        self.res_concat_dir = self.root_dir / "results_concat"
+        self.res_concat_dir = Path(self.config.paths.results_concat)
         self.res_concat_dir.mkdir(parents=True, exist_ok=True)
+
 
         self.logger.info(f"Directories configured for network: {network_stem}")
 

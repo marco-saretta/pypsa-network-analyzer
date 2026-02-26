@@ -60,6 +60,7 @@ simulations = [
 # Load model price data for all simulations
 # ------------------------------------------
 price_models = {}
+threshold = 1000  # EUR/MWh, to filter out load shedding events
 
 for simulation in simulations:
     external_file = (
@@ -70,6 +71,11 @@ for simulation in simulations:
     df = pd.read_csv(external_file)
     df.set_index("snapshot", inplace=True)
     df.index = pd.to_datetime(df.index)
+    
+    # If price in any column exceeds 1000, replace it with the max price below 1000 
+    # to filter out load shedding
+    row_caps = df.mask(df >= threshold).max(axis=1)
+    df = df.where(df < threshold, row_caps, axis=0)
 
     price_models[simulation] = df
 
@@ -114,8 +120,8 @@ load_pypsa = pd.concat(load_list)
 load_pypsa
 
 # %%
-# filter load and e_prices to only include timestamps that are present in e_prices_pypsa
-index = e_prices_pypsa.index
+# filter load and e_prices to only include timestamps that are present in pypsa
+index = load_pypsa.index
 load = load.loc[index]
 e_prices = e_prices.loc[index]
 # %%

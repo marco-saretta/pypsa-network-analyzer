@@ -25,6 +25,12 @@ network_files:
 paths:
   root: "${hydra:runtime.cwd}"
   log: "./logs"
+  data: "./data"
+  network_files_data: "./data/network_files"
+  results: "./results"
+  results_concat: "./results_concat"
+  figures: "./figures_paper"
+
 
 # Merge dataframes
 merge_dataframes:

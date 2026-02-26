@@ -18,7 +18,7 @@ def main(cfg: DictConfig) -> None:
     for network_file in tqdm(cfg.network_files, desc="Processing networks"):
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
-            # analyzer.extract_summary()
+            analyzer.extract_summary()
             # analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
@@ -26,12 +26,12 @@ def main(cfg: DictConfig) -> None:
 
     # Merge results by weather year groups
     for group_name, folder_list in tqdm(cfg.config_results_concat.items(), desc="Merging results"):
-        res_concat_folder_dir = Path("results_concat", group_name)
+        res_concat_folder_dir = Path(cfg.paths.results_concat) / group_name
         res_concat_folder_dir.mkdir(parents=True, exist_ok=True)
 
         for df_name in tqdm(cfg.merge_dataframes, desc="Merging dataframes"):
             merge_dataframes(
-                root=cfg.paths.root,
+                results_dir=Path(cfg.paths.results),
                 res_concat_folder=res_concat_folder_dir,
                 file_concat_folder_dict=folder_list,
                 df_to_merge_file=df_name,

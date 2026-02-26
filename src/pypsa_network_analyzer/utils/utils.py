@@ -21,18 +21,18 @@ def smape(A, F):
     return np.sum(tmp) / len(tmp) * 100
 
 def merge_dataframes(
-    root: Path,
+    results_dir: Path,  # NEW
     res_concat_folder: Path,
     file_concat_folder_dict: list,
     df_to_merge_file: str,
     logger=None,
     resample_rule: Optional[str] = None,
-    ) -> Optional[Path]:
+) -> Optional[Path]:
     """
     Merge CSV files from multiple weather year folders into a single combined CSV.
     
     Args:
-        root: Root path of the project
+        results_dir: Directory where individual results folders are located (e.g., results_sarah3)
         res_concat_folder: Output folder path (e.g., results_concat/hindcast_dyn_old)
         file_concat_folder_dict: List of folder names to merge
         df_to_merge: Name of CSV file to merge (without .csv extension)
@@ -42,7 +42,6 @@ def merge_dataframes(
     Returns:
         Path to merged file, or None if failed
     """
-    root = Path(root)
     df_to_merge_suffix = Path(df_to_merge_file).suffix
     df_to_merge = Path(df_to_merge_file).stem
 
@@ -58,7 +57,7 @@ def merge_dataframes(
         df_list = []
         
         for folder_name in file_concat_folder_dict:
-            csv_path = root / "results" / folder_name / "summary" / f"{df_to_merge}{df_to_merge_suffix}"
+            csv_path = Path(results_dir) / folder_name / "summary" / f"{df_to_merge}{df_to_merge_suffix}"
             
             if not csv_path.exists():
                 if logger:
