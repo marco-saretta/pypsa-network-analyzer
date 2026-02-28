@@ -24,6 +24,8 @@ class ResultsPlotter:
         self.sim_labels = list(cfg.config_results_concat.keys())
         self.error_list = ["mae", "rmse", "smape"]
         self.benchmark_name = "electricity_prices"
+        self.benchmark_name_unfiltered = "electricity_prices_unfiltered"
+        self.load_shed_name = "load_shedding_times"
         self.export_format = cfg.plot_export_format
         self.error_units = {"mae": "EUR/MWh", "rmse": "EUR/MWh", "smape": "%"}
 
@@ -34,6 +36,8 @@ class ResultsPlotter:
         self.setup_style()
         self.load_scores()
         self.load_prices()
+        self.load_prices_unfiltered()
+        self.load_timeseries_load_shedding()
 
     def setup_style(self):
         plt.style.use("seaborn-v0_8-whitegrid")
@@ -132,6 +136,82 @@ class ResultsPlotter:
         df_bench = df_bench[df_bench.index.year.isin(self.cfg.years_list)]
 
         self.prices_dict["benchmark"] = df_bench
+
+    def load_prices_unfiltered(self, sim_labels=None, interpolate=True):
+        """
+        Load and clean benchmark + simulation prices.
+        Stores result in self.prices_unfiltered_dict dict.
+        """
+        if sim_labels is None:
+            sim_labels = self.sim_labels
+
+        self.prices_unfiltered_dict = {}
+
+        # Load simulation
+        for sim_label in sim_labels:
+            file_dir = self.results_concat_dir / sim_label / self.benchmark_name_unfiltered / f"combined_{self.benchmark_name_unfiltered}.csv"
+
+            df_sim = pd.read_csv(file_dir, index_col=0, parse_dates=True)
+            df_sim = df_sim[df_sim.index.year.isin(self.cfg.years_list)]
+
+            self.prices_unfiltered_dict[sim_label] = df_sim
+
+        # Load benchmark
+        benchmark_path = self.data_dir / "benchmark" / "electricity_prices.csv"
+        df_bench = pd.read_csv(benchmark_path, index_col=0, parse_dates=True)
+
+        if df_bench.index.tz is None:
+            df_bench.index = df_bench.index.tz_localize("UTC")
+        else:
+            df_bench.index = df_bench.index.tz_convert("UTC")
+
+        if interpolate:
+            df_bench = df_bench.interpolate().ffill().bfill()
+
+        df_bench = df_bench[df_bench.index.year.isin(self.cfg.years_list)]
+
+        self.prices_unfiltered_dict["benchmark"] = df_bench
+
+    def load_timeseries_load_shedding(self, sim_labels=None):
+        """
+        Load load shedding timestamps for each simulation.
+        Stores result in self.load_shedding_dict.
+        """
+
+        if sim_labels is None:
+            sim_labels = self.sim_labels
+
+        self.load_shedding_dict = {}
+
+        for sim_label in sim_labels:
+            file_path = (
+                self.results_concat_dir
+                / sim_label
+                / self.load_shed_name
+                / f"combined_{self.load_shed_name}.csv"
+            )
+
+            series = pd.read_csv(
+                file_path,
+                usecols=["load_shedding_time"]  # optional, ensures only needed column
+            )["load_shedding_time"]
+
+            # Ensure datetimes
+            series = pd.to_datetime(series, errors="coerce")  # invalid parsing becomes NaT
+
+            # Drop NaT values
+            series = series.dropna()
+
+            # Ensure UTC tz
+            if series.dt.tz is None:
+                series = series.dt.tz_localize("UTC")
+            else:
+                series = series.dt.tz_convert("UTC")
+
+            # Filter years
+            series = series[series.dt.year.isin(self.cfg.years_list)]
+
+            self.load_shedding_dict[sim_label] = series
 
     def plot_error_by_simulation_and_year(self, error_metric, x_length=8):
         """Create boxplot showing MAE by simulation and year."""
@@ -493,14 +573,25 @@ class ResultsPlotter:
         print(f"Saved: {output_path}")
 
     def plot_prices(
-        self, x_length=8, resampling_rule="W", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
+        self, x_length=8, resampling_rule="D", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
     ):
         """Plot benchmark vs simulations per country."""
+
+        plot_order = [
+            "benchmark",
+            "hindcast-std",
+            "hindcast-dyn",
+            "hindcast-dyn-rolling",
+        ]
 
         for country in countries_list:
             fig, ax = plt.subplots(figsize=(x_length, x_length / self.phi))
 
-            for label, df in self.prices_dict.items():
+            for label in plot_order:
+                if label not in self.prices_dict:
+                    continue
+                df = self.prices_dict[label]
+                
                 if country not in df.columns:
                     continue
 
@@ -520,7 +611,7 @@ class ResultsPlotter:
                     )
 
                 ax.legend(frameon=True)
-                ax.set_title(f"{country} – Electricity Prices weekly resample", loc="left", fontsize=14, pad=20)
+                ax.set_title(f"{country} – Electricity Prices Daily resample", loc="left", fontsize=14, pad=20)
                 ax.set_xlim(left=series.index.min(), right=series.index.max())
                 # ax.set_ylim(bottom=0)
                 ax.set_ylabel("EUR/MWh")
@@ -532,6 +623,137 @@ class ResultsPlotter:
             plt.savefig(output_path)
             plt.close()
 
+            print(f"Saved: {output_path}")
+
+    def plot_europe_prices(
+        self,
+        x_length=8,
+        resampling_rule="D",
+        sim_labels=None,
+        rolling_window=None,
+        load_shedding_label="hindcast-dyn-rolling",
+    ):
+        """
+        Plot Europe reference price (europe_price_ref) and per-simulation europe_price.
+        Generates two plots: filtered and unfiltered electricity prices.
+        """
+
+        if sim_labels is None:
+            sim_labels = self.sim_labels
+
+        # Loop over both filtered and unfiltered datasets
+        datasets = {
+            "filtered": self.prices_dict,
+            "unfiltered": self.prices_unfiltered_dict,
+        }
+
+        for suffix, price_dict in datasets.items():
+            # Find a europe_price_ref from the first simulation that contains it
+            europe_ref_series = None
+            for lab in sim_labels:
+                df = price_dict.get(lab)
+                if df is None:
+                    continue
+                if "europe_price_ref" in df.columns:
+                    europe_ref_series = df["europe_price_ref"].copy()
+                    break
+
+            if europe_ref_series is None:
+                print(f"No 'europe_price_ref' found in any simulation ({suffix}). Skipping plot.")
+                continue
+
+            # Prepare figure
+            fig, ax = plt.subplots(figsize=(x_length, x_length / self.phi))
+
+            # Plot reference first (resample + rolling if requested)
+            ref_series = europe_ref_series
+            if resampling_rule:
+                ref_series = ref_series.resample(resampling_rule).mean()
+            if rolling_window:
+                ref_series = ref_series.rolling(rolling_window, min_periods=1, center=False).mean()
+
+            ref_color = self.sim_color.get("benchmark", "black")
+            ax.plot(ref_series.index, ref_series, label="Europe reference", color=ref_color, linewidth=2.0, zorder=3)
+
+            # Then plot each simulation's europe_price (if present)
+            plotted_any = False
+            for lab in sim_labels:
+                df = price_dict.get(lab)
+                if df is None:
+                    continue
+                if "europe_price" not in df.columns:
+                    continue
+
+                s = df["europe_price"].copy()
+                # align tz to UTC
+                try:
+                    if s.index.tz is None:
+                        s.index = s.index.tz_localize("UTC")
+                    else:
+                        s.index = s.index.tz_convert("UTC")
+                except Exception:
+                    pass
+
+                if resampling_rule:
+                    s = s.resample(resampling_rule).mean()
+                if rolling_window:
+                    s = s.rolling(rolling_window, min_periods=1, center=False).mean()
+
+                color = self.sim_color.get(lab, None)
+                ax.plot(s.index, s, label=lab, color=color, zorder=4)
+                plotted_any = True
+
+            if not plotted_any:
+                print(f"No simulation had 'europe_price' column ({suffix}). Only reference plotted.")
+
+            # -------------------------------------------------
+            # 🔹 Shade load shedding timestamps (light grey)
+            # -------------------------------------------------
+            if hasattr(self, "load_shedding_dict") and self.load_shedding_dict is not None:
+                timestamps = self.load_shedding_dict.get(load_shedding_label)
+                if timestamps is not None and len(timestamps) > 0:
+                    for ts in timestamps:
+                        try:
+                            start = pd.to_datetime(ts)
+                            if start.tzinfo is None:
+                                start = start.tz_localize("UTC")
+                            else:
+                                start = start.tz_convert("UTC")
+                        except Exception:
+                            continue
+
+                        ax.axvspan(
+                            start,
+                            start + pd.Timedelta(days=1),
+                            color="lightgrey",
+                            alpha=0.15,
+                            zorder=0,
+                        )
+
+            # Final plot cosmetics
+            ax.legend(frameon=True, loc="upper right")
+            ax.set_title(f"Europe — Electricity Price ({suffix})", loc="left", fontsize=14, pad=20)
+
+            # Compute x limits
+            xmins = [ref_series.index.min()]
+            xmaxs = [ref_series.index.max()]
+            for lab in sim_labels:
+                df = price_dict.get(lab)
+                if df is None:
+                    continue
+                if "europe_price" in df.columns:
+                    idx = df["europe_price"].index
+                    xmins.append(idx.min())
+                    xmaxs.append(idx.max())
+            ax.set_xlim(left=min(xmins), right=max(xmaxs))
+
+            ax.set_ylabel("EUR/MWh")
+            ax.grid(True, linestyle="dashed", alpha=0.5)
+
+            plt.tight_layout()
+            output_path = self.figures_dir / f"price_europe_{suffix}.{self.export_format}"
+            plt.savefig(output_path)
+            plt.close()
             print(f"Saved: {output_path}")
 
     def generate_all_plots(self):
@@ -554,6 +776,9 @@ class ResultsPlotter:
         # Plot price simulations
         self.plot_prices()
 
+        # Plot Europe price reference + simulations
+        self.plot_europe_prices()
+        
         print("All plots generated successfully!")
 
 
