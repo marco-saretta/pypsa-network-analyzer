@@ -126,13 +126,14 @@ years = range(2020, 2025)
 
 ls_list = []
 prices_list = []
+load_list = []
 all_countries = set()
 
 for year in years:
     print(f"Processing {year}...")
     
     # Load network
-    network_path = f"{file_dir}/data/network_files_sarah3/hindcast-dyn-rolling-wy{year}.nc"
+    network_path = f"{file_dir}/data/network_files_sarah3_rc/hindcast-dyn-rolling-wy{year}.nc"
     n = pypsa.Network(network_path)
     
     # Get generation statistics
@@ -159,6 +160,7 @@ for year in years:
         ls = df_ls
 
     prices = n.statistics.prices(groupby_time=False).T
+    load = n.loads_t.p
 
     # Track countries present in this year
     all_countries.update(ls.columns)
@@ -166,6 +168,7 @@ for year in years:
     # Store for later concatenation
     ls_list.append(ls)
     prices_list.append(prices)
+    load_list.append(load)
 
 # Make sure all yearly dfs have same columns (fill missing with 0 or NaN)
 all_countries = sorted(all_countries)
@@ -181,12 +184,19 @@ for df in prices_list:
     df_aligned = df.reindex(columns=all_countries, fill_value=np.nan)
     prices_filtered.append(df_aligned)
 
+load_filtered = []
+for df in load_list:
+    df_aligned = df.reindex(columns=all_countries, fill_value=np.nan)
+    load_filtered.append(df_aligned)
+
 # Concatenate along time (index is snapshots)
 ls = pd.concat(ls_aligned).sort_index()
 # Replace all NaN with 0 (if any remain)
 ls = ls.fillna(0)
 
 prices = pd.concat(prices_filtered).sort_index()
+
+load = pd.concat(load_filtered).sort_index()
 
 # ls now has:
 # - index: full datetime index across all years
@@ -261,4 +271,15 @@ for country in ls.columns:
     fig.tight_layout()
     plt.show()
 
-
+# %%
+# Calculate the ratio of load shedding to total load for Norway
+if 'NO' in ls.columns and 'NO' in load.columns:
+    ratio_no = ls['NO'] / load['NO']
+    ratio_no.plot(figsize=(12, 6))
+    plt.title("Ratio of Load Shedding to Total Load in Norway")
+    plt.xlabel("Time")
+    plt.ylabel("Load Shedding / Total Load")
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+# %%
