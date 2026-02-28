@@ -14,20 +14,18 @@ network_2024_path = f"{file_dir}/data/network_files_sarah3/hindcast-dyn-rolling-
 n= pypsa.Network(network_2024_path)
 
 # %%
-prices = n.statistics.prices(groupby_time=False)
+prices = n.statistics.prices(groupby_time=False).T
 prices
 # %%
 # find max price
 max_price = prices.max().max()
 print("Max price:", max_price)
 # %%
-# Choose only line with DE 
-# 2. Unstack the 'name' (the country/bus name) to move it from rows to columns
-# Note: If 'name' is the second level of the index, use level=1
-df_prices = prices.unstack(level=1).unstack(level='name')
-df_prices.index = pd.to_datetime(df_prices.index)
-df_prices
 
+threshold = 1000
+row_caps = prices.mask(prices >= threshold).max(axis=1)
+df_prices = prices.where(prices < threshold, row_caps, axis=0)
+df_prices
 # %%
 # Resample to weekly and take mean
 weekly_prices = df_prices.resample("W").mean()
