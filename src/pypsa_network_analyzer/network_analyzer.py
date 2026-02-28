@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
 from omegaconf import DictConfig
+import numpy as np
 
 import logging
 
@@ -181,14 +182,176 @@ class NetworkAnalyzer:
         gen_t_bus = gen_t_bus.add(phs_net_t_bus, fill_value=0)
 
         return gen_t_bus, gen_filtered_t_bus
+    
+    
+
+    def compute_aggregated_european_price_reference(self, filtered=False):
+
+        def aggregate_real_to_countries(
+            price_real: pd.DataFrame,
+            load_real: pd.DataFrame,
+            country_mapping: dict,
+        ):
+            """
+            Aggregate zone-level real price & load data to country level
+            using load-weighted prices.
+            """
+
+            # First delete any existing country-level columns, which are in the mapping
+            for country in country_mapping.keys():
+                if country in price_real.columns:
+                    price_real.drop(columns=country, inplace=True)
+                    # print(f"Dropped existing country column from price_real: {country}")
+                if country in load_real.columns:
+                    load_real.drop(columns=country, inplace=True)
+                    # print(f"Dropped existing country column from load_real: {country}")
+                
+
+            # For Luxemburg copy the DE column in prices and add with LU as name 
+            price_real["LU"] = price_real["DE"]
+
+            for country, zones in country_mapping.items():
+                zones = [z for z in zones if z in price_real.columns and z in load_real.columns]
+                if not zones:
+                    continue
+
+                price_c = price_real[zones]
+                load_c = load_real[zones]
+
+                # print(f"Aggregating {country} from zones: {zones}")
+
+                # Make sure that when load is missing for up to 5 timesteps
+                # we take the average of the last known load value and the next known load value,
+                #  to avoid losing too much data
+                # Fill gaps up to 5 timesteps using interpolation
+                # Treat zeros as missing
+                load_c = load_c.replace(0, np.nan)
+                load_c = load_c.interpolate(method="time", limit=5)
+                price_c = price_c.interpolate(method="time", limit=5)
+
+                weighted_price = (price_c * load_c).sum(axis=1) / load_c.sum(axis=1)
+                total_load = load_c.sum(axis=1)
+
+                # Add the new entry to the original dataframes and sort columns alphabetically
+                price_real[country] = weighted_price
+                load_real[country] = total_load
+                price_real = price_real.reindex(sorted(price_real.columns), axis=1)
+                load_real = load_real.reindex(sorted(load_real.columns), axis=1)
+
+            return price_real, load_real
+
+
+        # ===========================================
+        # European electrictiy price
+        # ===========================================
+        file_etnsoe_price = self.data_dir / "benchmark" / "electricity_prices.csv"
+        entso_e_price = pd.read_csv(
+            file_etnsoe_price,
+            parse_dates=True,
+            index_col=0
+        )
+        # Remove timezone
+        entso_e_price.index = entso_e_price.index.tz_localize(None)
+        # Rename index properly
+        entso_e_price.index.name = "snapshot"
+
+        # Country/region to bidding zones mapping
+        country_mapping = {
+            "DK": ["DK_1", "DK_2"],
+            "SE": ["SE_1", "SE_2", "SE_3", "SE_4"],
+            "NO": ["NO_1", "NO_2", "NO_3", "NO_4", "NO_5"],
+            "IT": ["IT_CNOR", "IT_CSUD", "IT_NORD", "IT_SARD", "IT_SICI"],
+        }
+
+        file_entsoe_load = self.data_dir / "benchmark" / "demand.csv"
+        entso_e_load = pd.read_csv(
+            file_entsoe_load,
+            parse_dates=True,
+            index_col=0
+        )
+        entso_e_load.index = entso_e_load.index.tz_localize(None)
+        # Rename index properly
+        entso_e_load.index.name = "snapshot"
+
+        # Electric load reference
+        self.load_df = self.n.loads_t.p_set
+        index = self.load_df.index
+        price_pypsa = self.n.buses_t.marginal_price
+        price_pypsa = price_pypsa.loc[index]
+        entso_e_price = entso_e_price.loc[index]
+        entso_e_load = entso_e_load.loc[index]
+
+        price_ref, load_ref = aggregate_real_to_countries(entso_e_price, entso_e_load, country_mapping)
+
+        common_index = (
+            self.load_df.index.intersection(price_pypsa.index)
+            .intersection(price_ref.index)
+            .intersection(load_ref.index)
+        )
+
+        lm = self.load_df.loc[common_index]
+        pm = price_pypsa.loc[common_index]
+        pr = price_ref.loc[common_index]
+        lr = load_ref.loc[common_index]
+
+        # -------------------------------------------------
+        # 3) Find common country columns
+        # -------------------------------------------------
+        common_countries = set(pm.columns) & set(pr.columns) & set(lm.columns) & set(lr.columns)
+        common_countries = sorted(common_countries)
+
+        # print("Common countries used in comparison:")
+        # print(common_countries)
+
+        pm = pm[common_countries]
+        lm = lm[common_countries]
+        pr = pr[common_countries]
+        lr = lr[common_countries]
+
+        if filtered == True:
+            # Filter out hours with load shedding in any country (load > 0 but price is NaN or above threshold)
+            threshold = 1000
+            row_caps = pm.mask(pm >= threshold).max(axis=1)
+            pm = pm.where(pm < threshold, row_caps, axis=0)
+        else:
+            pass
+
+        # -------------------------------------------------
+        # 4) Validity mask (per timestamp & country)
+        # -------------------------------------------------
+        valid = lm.notna() & pr.notna() & lr.notna() & pm.notna()
+        european_price = pd.DataFrame(index=common_index)
+        european_price["europe_price_ref"] = (pr * lr * valid).sum(axis=1) / (lr * valid).sum(axis=1)
+        european_price["europe_price"] = (pm * lm * valid).sum(axis=1) / (lm * valid).sum(axis=1)
+
+        return european_price
+
 
     def extract_summary(self):
         folder = self.network_file_res_dir / "summary"
         folder.mkdir(parents=True, exist_ok=True)
 
         # Electricity prices
-        self.electricity_prices_df = self.n.buses_t.marginal_price
+        self.electricity_prices_df_raw = self.n.buses_t.marginal_price
+        # Get european price 
+        price_europe = self.compute_aggregated_european_price_reference(filtered=False)
+        self.electricity_prices_df = self.electricity_prices_df_raw.join(price_europe, how="left")
+        self.electricity_prices_df.to_csv(folder / "electricity_prices_unfiltered.csv")
+        prices = self.electricity_prices_df_raw
+        threshold = 1000
+        mask = prices >= threshold
+        self.load_shedding_times = prices.index[mask.any(axis=1)]
+        df_ls = pd.DataFrame(
+        {"load_shedding_time": self.load_shedding_times})
+        df_ls.to_csv(folder / "load_shedding_times.csv", index=False)
+        row_caps = prices.mask(prices >= threshold).max(axis=1)
+        df_prices = prices.where(prices < threshold, row_caps, axis=0)
+        price_europe_filtered = self.compute_aggregated_european_price_reference(filtered=True)
+        # Make sure index alignes and add both columns to df_prices
+        df_prices = df_prices.join(price_europe_filtered, how="left")
+        self.electricity_prices_df = df_prices
         self.electricity_prices_df.to_csv(folder / "electricity_prices.csv")
+
 
         # Buses
         self.buses_df = self.n.buses
