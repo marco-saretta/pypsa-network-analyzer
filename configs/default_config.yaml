@@ -35,6 +35,8 @@ paths:
 # Merge dataframes
 merge_dataframes:
 - electricity_prices.csv
+- load_shedding_times.csv
+- electricity_prices_unfiltered.csv
 #- generators_dispatch.csv
 
 # Compute scores

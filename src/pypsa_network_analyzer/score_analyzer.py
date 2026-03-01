@@ -102,6 +102,43 @@ class ScoreAnalyzer:
                 self.logger.error(f"Error computing scores for year {year}: {e}")
 
         return df_mae, df_rmse, df_smape
+    
+    def compute_europe_scores_by_year(self):
+        """
+        Compute MAE, RMSE, SMAPE between:
+        benchmark: europe_price_ref
+        simulation: europe_price
+        """
+
+        required_cols = {"europe_price_ref", "europe_price"}
+
+        if not required_cols.issubset(self.df_pypsa.columns):
+            raise ValueError(
+                f"Missing required columns in simulation file: {required_cols}"
+            )
+
+        df_mae = pd.Series(index=self.years_list, dtype=float, name="MAE")
+        df_rmse = pd.Series(index=self.years_list, dtype=float, name="RMSE")
+        df_smape = pd.Series(index=self.years_list, dtype=float, name="SMAPE")
+
+        for year in self.years_list:
+            try:
+                df_y = self.df_pypsa[self.df_pypsa.index.year == year]
+
+                # Align safely
+                idx = df_y.index
+
+                benchmark = df_y.loc[idx, "europe_price_ref"].to_numpy()
+                simulation = df_y.loc[idx, "europe_price"].to_numpy()
+
+                df_mae.loc[year] = mean_absolute_error(benchmark, simulation)
+                df_rmse.loc[year] = root_mean_squared_error(benchmark, simulation)
+                df_smape.loc[year] = smape(benchmark, simulation)
+
+            except Exception as e:
+                self.logger.error(f"Error computing Europe score for year {year}: {e}")
+
+        return df_mae, df_rmse, df_smape
 
     def save_scores(self, df, filename):
         path = self.scores_dir / filename

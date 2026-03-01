@@ -60,6 +60,12 @@ def main(cfg: DictConfig) -> None:
         score_analyzer.save_scores(df_rmse, filename="scores_rmse.csv")
         score_analyzer.save_scores(df_smape, filename="scores_smape.csv")
 
+        df_eu_mae, df_eu_rmse, df_eu_smape = score_analyzer.compute_europe_scores_by_year()
+
+        score_analyzer.save_scores(df_eu_mae, "europe_mae.csv")
+        score_analyzer.save_scores(df_eu_rmse, "europe_rmse.csv")
+        score_analyzer.save_scores(df_eu_smape, "europe_smape.csv")
+
         logger.info(f"Completed {group_name}\n")
 
         del score_analyzer

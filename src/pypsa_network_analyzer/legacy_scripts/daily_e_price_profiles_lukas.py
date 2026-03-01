@@ -60,17 +60,23 @@ simulations = [
 # Load model price data for all simulations
 # ------------------------------------------
 price_models = {}
+load_shedding_times = {} 
 threshold = 1000  # EUR/MWh, to filter out load shedding events
 
 for simulation in simulations:
     external_file = (
-        f"{file_dir}/results_concat/{simulation}/electricity_prices/"
+        f"{file_dir}/results_concat_sarah3_rc/{simulation}/electricity_prices/"
         f"combined_electricity_prices.csv"
     )
 
     df = pd.read_csv(external_file)
     df.set_index("snapshot", inplace=True)
     df.index = pd.to_datetime(df.index)
+
+    # Boolean mask where price exceeds threshold
+    mask = df >= threshold
+    # Store timestamps where ANY column exceeds threshold
+    load_shedding_times[simulation] = df.index[mask.any(axis=1)]
     
     # If price in any column exceeds 1000, replace it with the max price below 1000 
     # to filter out load shedding
@@ -110,7 +116,7 @@ load.index.name = "snapshot"
 load_list = []
 for year in years:
     external_file_load_pypsa = (
-        f"{file_dir}/results/{simulation}-wy{year}/summary/electric_load.csv"
+        f"{file_dir}/results_sarah3_rc/{simulation}-wy{year}/summary/electric_load.csv"
     )
     load_year = pd.read_csv(external_file_load_pypsa)
     load_year.set_index("snapshot", inplace=True)
@@ -280,7 +286,8 @@ import matplotlib as mpl
 
 def plot_weekly_european_prices_all_simulations(
     european_prices: dict,
-    title: str = "European Weekly Electricity Prices (2020–2024)",
+    load_shedding_times: dict | None = None,
+    title: str = "European Daily Electricity Prices (2020–2024)",
     x_length: float = 8,
     sim_color: dict | None = None,
 ):
@@ -311,12 +318,26 @@ def plot_weekly_european_prices_all_simulations(
     fig, ax = plt.subplots(figsize=(x_length, x_length / phi))
 
     # --- Weekly resample ---
-    weekly_data = {}
+    daily_data = {}
     for sim, df in european_prices.items():
-        weekly_data[sim] = df[["price_model", "price_real"]].resample("W").mean()
+        daily_data[sim] = df[["price_model", "price_real"]].resample("D").mean()
 
     # Historical
-    hist = next(iter(weekly_data.values()))["price_real"]
+    hist = next(iter(daily_data.values()))["price_real"]
+
+    # -------------------------------------------------
+    # 🔹 Shade load shedding timestamps (light grey)
+    # -------------------------------------------------
+    if load_shedding_times is not None:
+        for sim, timestamps in load_shedding_times.items():
+            for ts in timestamps:
+                ax.axvspan(
+                    ts,
+                    ts + pd.Timedelta(days=1),
+                    color="lightgrey",
+                    alpha=0.15,
+                    zorder=0,
+                )
 
     # --- Plot benchmark (same color logic as class) ---
     ax.plot(
@@ -328,7 +349,7 @@ def plot_weekly_european_prices_all_simulations(
     )
 
     # --- Plot simulations ---
-    for sim, df in weekly_data.items():
+    for sim, df in daily_data.items():
         ax.plot(
             df.index,
             df["price_model"],
@@ -337,14 +358,15 @@ def plot_weekly_european_prices_all_simulations(
         )
 
     # --- Formatting identical to class ---
-    ax.legend(frameon=True)
+    # Legend at top right
+    ax.legend(frameon=True, loc="upper right")
     ax.set_title(title, loc="left", fontsize=14, pad=20)
     ax.set_xlim(left=hist.index.min(), right=hist.index.max())
     ax.set_ylabel("EUR/MWh")
     ax.grid(True, linestyle="dashed", alpha=0.5)
     plt.tight_layout()
     # Save as pdf in figures_paper folder
-    fig_dir = Path(__file__).parent.parent.parent.parent.resolve() / "figures_paper"
+    fig_dir = Path(__file__).parent.parent.parent.parent.resolve() / "figures_paper_sarah3_rc"
     fig_path = fig_dir / "price_EU.pdf"
     plt.savefig(fig_path, format="pdf")
     plt.show()
@@ -353,6 +375,7 @@ def plot_weekly_european_prices_all_simulations(
 # %%
 plot_weekly_european_prices_all_simulations(
     european_prices=european_prices,
+    load_shedding_times=load_shedding_times,
 )
 
 # %%
