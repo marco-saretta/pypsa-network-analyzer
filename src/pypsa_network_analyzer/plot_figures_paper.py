@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import matplotlib as mpl
 import seaborn as sns
 
@@ -59,9 +60,10 @@ class ResultsPlotter:
         plt.rcParams["font.family"] = "Arial"
         plt.rcParams["axes.titleweight"] = "bold"
         # plt.rcParams['axes.labelweight'] = 'bold'
-        plt.rcParams["axes.labelsize"] = 12
-        plt.rcParams["xtick.labelsize"] = 10
-        plt.rcParams["ytick.labelsize"] = 10
+        plt.rcParams["axes.labelsize"] = 18
+        plt.rcParams["xtick.labelsize"] = 18
+        plt.rcParams["ytick.labelsize"] = 18
+        plt.rcParams["legend.fontsize"] = 16
 
         self.sim_color = {
             "benchmark": self.nature_sky_blue,
@@ -149,7 +151,12 @@ class ResultsPlotter:
 
         # Load simulation
         for sim_label in sim_labels:
-            file_dir = self.results_concat_dir / sim_label / self.benchmark_name_unfiltered / f"combined_{self.benchmark_name_unfiltered}.csv"
+            file_dir = (
+                self.results_concat_dir
+                / sim_label
+                / self.benchmark_name_unfiltered
+                / f"combined_{self.benchmark_name_unfiltered}.csv"
+            )
 
             df_sim = pd.read_csv(file_dir, index_col=0, parse_dates=True)
             df_sim = df_sim[df_sim.index.year.isin(self.cfg.years_list)]
@@ -185,15 +192,12 @@ class ResultsPlotter:
 
         for sim_label in sim_labels:
             file_path = (
-                self.results_concat_dir
-                / sim_label
-                / self.load_shed_name
-                / f"combined_{self.load_shed_name}.csv"
+                self.results_concat_dir / sim_label / self.load_shed_name / f"combined_{self.load_shed_name}.csv"
             )
 
             series = pd.read_csv(
                 file_path,
-                usecols=["load_shedding_time"]  # optional, ensures only needed column
+                usecols=["load_shedding_time"],  # optional, ensures only needed column
             )["load_shedding_time"]
 
             # Ensure datetimes
@@ -269,7 +273,7 @@ class ResultsPlotter:
         plt.ylim(bottom=0, top=self.error_max_values[error_metric])
         plt.ylabel(self.error_axis_labels[error_metric])
 
-        plt.legend(title="Year", frameon=True)
+        plt.legend(frameon=True)
         plt.tight_layout()
 
         output_path = self.figures_dir / f"{error_metric}_by_simulation_and_year.{self.export_format}"
@@ -277,7 +281,7 @@ class ResultsPlotter:
         plt.close()
         print(f"Saved: {output_path}")
 
-    def plot_error_by_simulation_and_year_all(self, x_length=8):
+    def plot_error_by_simulation_and_year_all(self, x_length=12):
         """Create boxplot showing all error metrics by simulation and year."""
 
         # Build long dataframes for each error metric
@@ -308,9 +312,12 @@ class ResultsPlotter:
         year_order = sorted(long_dfs[self.error_list[0]]["year"].unique())
 
         fig, axs = plt.subplots(
-            nrows=len(self.error_list), ncols=1,
-            sharex=True, sharey=False,
-            figsize=(x_length, x_length / self.phi * len(self.error_list))
+            nrows=len(self.error_list),
+            ncols=1,
+            sharex=True,
+            sharey=False,
+            figsize=(x_length, x_length * self.phi),
+            gridspec_kw={"hspace": 0.2},  # better vertical spacing
         )
 
         # Handle case where there's only one error metric (axs won't be a list)
@@ -341,12 +348,12 @@ class ResultsPlotter:
 
             # Only show legend on the first subplot
             if ax == axs[0]:
-                ax.legend(title="Year", frameon=True)
+                ax.legend(frameon=True, loc="upper center", ncol=5, bbox_to_anchor=(0.5, 1.3), fancybox=True)
             else:
                 ax.get_legend().remove()
 
         plt.xticks(rotation=0, ha="center")
-        plt.tight_layout()
+        plt.subplots_adjust(top=0.92, bottom=0.08, left=0.12, right=0.98, hspace=0.3)
 
         output_path = self.figures_dir / f"all_metric_by_simulation_and_year.{self.export_format}"
         plt.savefig(output_path)
@@ -591,7 +598,7 @@ class ResultsPlotter:
                 if label not in self.prices_dict:
                     continue
                 df = self.prices_dict[label]
-                
+
                 if country not in df.columns:
                     continue
 
@@ -673,7 +680,7 @@ class ResultsPlotter:
                 ref_series = ref_series.rolling(rolling_window, min_periods=1, center=False).mean()
 
             ref_color = self.sim_color.get("benchmark", "black")
-            ax.plot(ref_series.index, ref_series, label="Europe reference", color=ref_color, linewidth=2.0, zorder=3)
+            ax.plot(ref_series.index, ref_series, label="Europe reference", color=ref_color, linewidth=1.0, zorder=3)
 
             # Then plot each simulation's europe_price (if present)
             plotted_any = False
@@ -700,14 +707,14 @@ class ResultsPlotter:
                     s = s.rolling(rolling_window, min_periods=1, center=False).mean()
 
                 color = self.sim_color.get(lab, None)
-                ax.plot(s.index, s, label=lab, color=color, zorder=4)
+                ax.plot(s.index, s, label=lab, color=color, zorder=4, linewidth=0.8)
                 plotted_any = True
 
             if not plotted_any:
                 print(f"No simulation had 'europe_price' column ({suffix}). Only reference plotted.")
 
             # -------------------------------------------------
-            # 🔹 Shade load shedding timestamps (light grey)
+            # Shade load shedding timestamps (light grey)
             # -------------------------------------------------
             if hasattr(self, "load_shedding_dict") and self.load_shedding_dict is not None:
                 timestamps = self.load_shedding_dict.get(load_shedding_label)
@@ -726,13 +733,41 @@ class ResultsPlotter:
                             start,
                             start + pd.Timedelta(days=1),
                             color="lightgrey",
-                            alpha=0.15,
+                            alpha=0.05,
                             zorder=0,
                         )
 
             # Final plot cosmetics
-            ax.legend(frameon=True, loc="upper right")
-            ax.set_title(f"Europe — Electricity Price ({suffix})", loc="left", fontsize=14, pad=20)
+            legend_label_map = {
+                "Europe reference": "Historical",
+                "hindcast-std": "Hindcast-static",
+                "hindcast-dyn": "Hindcast-dynamic",
+                "hindcast-dyn-rolling": "Hindcast-dynamic-rolling horizon",
+            }
+
+            # Enforce desired legend order
+            desired_order = [
+                "Europe reference",
+                "hindcast-std",
+                "hindcast-dyn",
+                "hindcast-dyn-rolling",
+            ]
+
+            handles, labels = ax.get_legend_handles_labels()
+            handle_map = dict(zip(labels, handles))
+            ordered_handles = [handle_map[k] for k in desired_order if k in handle_map]
+            ordered_labels = [legend_label_map.get(k, k) for k in desired_order if k in handle_map]
+            ax.legend(
+                ordered_handles,
+                ordered_labels,
+                frameon=True,
+                loc="upper center",
+                ncol=2,
+                bbox_to_anchor=(0.5, 1.3),
+                fancybox=True,
+            )
+
+            ax.set_ylim(bottom=0, top=600)
 
             # Compute x limits
             xmins = [ref_series.index.min()]
@@ -747,8 +782,13 @@ class ResultsPlotter:
                     xmaxs.append(idx.max())
             ax.set_xlim(left=min(xmins), right=max(xmaxs))
 
+            # X-axis: show only years, move ticks lower
+            ax.xaxis.set_major_locator(mdates.YearLocator())
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+            ax.tick_params(axis="x", pad=15)  # move xticks lower
+
             ax.set_ylabel("EUR/MWh")
-            ax.grid(True, linestyle="dashed", alpha=0.5)
+            ax.grid(True, linestyle="dashed", alpha=0.6)
 
             plt.tight_layout()
             output_path = self.figures_dir / f"price_europe_{suffix}.{self.export_format}"
@@ -761,24 +801,24 @@ class ResultsPlotter:
         print("Generating plots...")
 
         # Print boxplot per country across sims
-        self.plot_boxplot_per_country()
+        # self.plot_boxplot_per_country()
 
         # Print scatter plot per country across sims
-        self.plot_yearly_values_per_country()
+        # self.plot_yearly_values_per_country()
 
         # Print single boxplot for error metrics
         self.plot_error_by_simulation_and_year_all(x_length=6)
 
         # Plot individual boxplot for simulation per year
-        for error_metric in self.error_list:
-            self.plot_error_by_simulation_and_year(error_metric, x_length=7)
+        # for error_metric in self.error_list:
+        #    self.plot_error_by_simulation_and_year(error_metric, x_length=7)
 
         # Plot price simulations
-        self.plot_prices()
+        # self.plot_prices()
 
         # Plot Europe price reference + simulations
-        self.plot_europe_prices()
-        
+        # self.plot_europe_prices()
+
         print("All plots generated successfully!")
 
 
