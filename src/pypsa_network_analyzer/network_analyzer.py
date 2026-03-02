@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 from typing import Optional
 from omegaconf import DictConfig
 import numpy as np
+import os
+import re
+import matplotlib.dates as mdates 
+
 
 import logging
 
@@ -1113,6 +1117,713 @@ class NetworkAnalyzer:
         hydro_p.sum(axis=1).plot(ax=axs[1], title="Hydro Reservoir Daily avg Power", color=self.nature_bluish_green)
         self._save_plot(fig, f"{bus}_hydro_power", bus=bus)
 
+
+    def plot_EUR_country_generation_function(self):
+        cap_font = 20
+        week_plot = True
+        month_plot = False
+        europe_plot = False
+        #print("Running EUR_total_generation_function_monthly...")
+        n = self.n
+        # --------------------------------------------------
+        # Load hourly generation data
+        # --------------------------------------------------
+
+        # Load external generation data for this bus
+        folder = (
+                self.root_dir / "data" / "generation" / "generation_hourly_data"
+        )
+
+        folder_plot_dispatch = self.network_file_res_dir / "summary" / "dispatch"
+        folder_plot_dispatch.mkdir(parents=True, exist_ok=True)
+
+        dfs = []
+        
+        for filename in os.listdir(folder):
+        #for filename in folder.glob("generation_*_hourly_data.csv"):
+            if filename.startswith("generation_") and filename.endswith("_hourly_data.csv"):
+                key = filename.removeprefix("generation_").removesuffix("_hourly_data.csv")
+        
+                # Skip if name contains "_"
+                if "_" in key:
+                    continue
+        
+                file_path = folder / filename
+                df = pd.read_csv(file_path, index_col=0)
+                df.index = pd.to_datetime(df.index)
+                df.index = df.index.tz_convert(None)
+                df = df.loc[df.index.intersection(n.snapshots)]
+        
+                # Add key as prefix to columns
+                df = df.add_prefix(f"{key} ")
+        
+                dfs.append(df)
+        
+        #  Combine all into one dataframe (columns side-by-side)
+        df_combined = pd.concat(dfs, axis=1)
+
+
+        # Extract hydro and pumped hydro storage units
+        hydro_units = n.storage_units[n.storage_units['carrier'] == 'hydro']
+        phs_units = n.storage_units[n.storage_units['carrier'] == 'PHS']  
+        
+        # Add storage unit discharges (hydro + PHS) to generation dispatch
+        hydro_dispatch = n.storage_units_t.p_dispatch[hydro_units.index]
+        
+        phs_net = n.storage_units_t.p[phs_units.index]
+        phs_dispatch = n.storage_units_t.p_dispatch[phs_units.index]
+
+        df_generators_pypsa = n.generators_t.p
+        df_generators_pypsa = df_generators_pypsa.join(hydro_dispatch)
+
+
+            
+        phs_pypsa = {}
+        custom_cols = {}
+        # Get all unique keys
+        keys = [col.split(" ", 1)[0] for col in df_combined.columns]
+        keys = list(set(keys))
+
+        for key in keys:
+            # Construct full column names
+            agg_col = f"{key} ('Hydro Pumped Storage', 'Actual Aggregated')"
+            cons_col = f"{key} ('Hydro Pumped Storage', 'Actual Consumption')"
+            net_col = f"{key} Hydro Pumped Storage Net"
+            base_col = f"{key} Hydro Pumped Storage"
+
+            # Compute custom column depending on available columns
+            if agg_col in df_combined.columns and cons_col in df_combined.columns:
+                custom_cols[key] = (df_combined[agg_col] - df_combined[cons_col]).clip(lower=0)
+                phs_pypsa[f"{key} PHS"] = phs_net[f"{key} PHS"].clip(lower=0)
+            elif net_col in df_combined.columns:
+                custom_cols[key] = df_combined[net_col].clip(lower=0)
+                phs_pypsa[f"{key} PHS"] = phs_net[f"{key} PHS"].clip(lower=0)
+            elif base_col in df_combined.columns:
+                custom_cols[key] = df_combined[base_col].clip(lower=0)
+                phs_pypsa[f"{key} PHS"] = phs_dispatch[f"{key} PHS"].clip(lower=0)
+            
+                
+
+        # Add each custom column to the dataframe
+        for key, series in custom_cols.items():
+            df_combined[f"{key} Hydro Pumped Storage Custom"] = series
+
+        for key, series in phs_pypsa.items():
+            df_generators_pypsa[f"{key}"] = series
+                
+
+        df_generators_pypsa.fillna(0, inplace=True)
+        
+        # Step 1: remove columns containing 'Actual Consumption'
+        df_combined = df_combined.loc[
+            :, ~df_combined.columns.astype(str).str.contains("Actual Consumption")
+        ]
+        
+        
+        new_cols = []
+        
+        for c in df_combined.columns:
+            c_str = str(c)
+        
+            if "Actual Aggregated" in c_str:
+                # Extract country key (first word)
+                key = c_str.split(" ", 1)[0]
+        
+                # Extract first quoted text
+                match = re.search(r"'([^']+)'", c_str)
+        
+                if match:
+                    tech = match.group(1)
+                    new_cols.append(f"{key} {tech}")
+                else:
+                    new_cols.append(c_str)
+        
+            else:
+                new_cols.append(c_str)
+        
+        df_combined.columns = new_cols
+                
+            
+        mapping = {
+            "0 offwind-ac": "Wind Offshore",
+            "1 offwind-ac": "Wind Offshore", 
+            "2 offwind-ac": "Wind Offshore",
+            "0 offwind-dc": "Wind Offshore",
+            "1 offwind-dc": "Wind Offshore",
+            "2 offwind-dc": "Wind Offshore",
+            "0 onwind": "Wind Onshore",
+            "1 onwind": "Wind Onshore",
+            "2 onwind": "Wind Onshore",
+            "0 solar": "Solar",
+            "1 solar": "Solar",
+            "2 solar": "Solar",
+            "0 solar-hsat": "Solar",
+            "1 solar-hsat": "Solar",
+            "2 solar-hsat": "Solar",
+            "CCGT": "Fossil Gas",
+            "OCGT": "Fossil Gas",
+            "PHS": "Hydro Pumped Storage Custom", 
+            "hydro": "Hydro Water Reservoir",       
+            "biomass": "Biomass",
+            "coal": "Fossil Hard coal",
+            "geothermal": "Geothermal",
+            "lignite": "Fossil Brown coal/Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Fossil Oil",
+            "ror": "Hydro Run-of-river and poundage",
+        }
+        
+
+        
+        
+        def map_with_key(col):
+            parts = col.split(" ", 1)  # split into key and generator type
+            if len(parts) == 2:
+                key, gen_type = parts
+                mapped_type = mapping.get(gen_type, gen_type)  # default to original if not in mapping
+                return f"{key} {mapped_type}"
+            else:
+                return col  # if no space, return as is
+        
+        mapped_columns = [map_with_key(c) for c in df_generators_pypsa.columns]
+            
+        # Assign back
+        df_generators_pypsa.columns = mapped_columns
+        
+        
+        
+        
+        # Filter ENTSOE columns to keep only common tech
+        common_tech_cols = df_generators_pypsa.columns.intersection(df_combined.columns)
+        
+        df_combined = df_combined.loc[:, common_tech_cols]
+        df_combined = df_combined.dropna(axis=1, how="all")
+
+        
+        
+
+        #Mapping makes multiple tech have same name. This combines multiple of same tech for same country.
+        df_generators_pypsa = (df_generators_pypsa.T.groupby(level=0).sum().T)
+        
+        #PyPSA only having common technologies
+        df_generators_pypsa = df_generators_pypsa.loc[:, common_tech_cols]
+        
+        
+        # Monthly dispatch and MWh to GWh 
+        df_generators_pypsa_monthly = df_generators_pypsa.resample('ME').sum()/1e3 
+        df_combined_monthly = df_combined.resample('ME').sum()/1e3 
+        df_difference_monthly = df_combined_monthly-df_generators_pypsa_monthly
+        
+        
+        
+        # Put both dataframes in a dict
+        dataframes_monthly = {
+            "PyPSA": df_generators_pypsa_monthly,
+            "ENTSO-E": df_combined_monthly
+        }
+        
+        df_percent_dict = {}
+        
+        for label, df in dataframes_monthly.items():
+        
+            df_percent = pd.DataFrame(index=df.index)
+        
+            # Get all countries (first word of column names)
+            countries = sorted({c.split(" ")[0] for c in df.columns})
+        
+            for country in countries:
+                # Columns belonging to this country
+                country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                
+                # Compute percentage relative to the country total
+                country_percent = df[country_cols].div(df[country_cols].sum(axis=1), axis=0) * 100
+                
+                # Add to the new dataframe
+                df_percent = pd.concat([df_percent, country_percent], axis=1)
+            
+            # Save result in dictionary
+            df_percent_dict[label] = df_percent
+        
+        # Now you can access:
+        df_generators_pypsa_monthly_percent = df_percent_dict["PyPSA"]
+        df_combined_monthly_percent = df_percent_dict["ENTSO-E"]
+        
+        
+        def aggregate_to_europe_total(df):
+            return (
+                df
+                .T
+                .groupby(lambda x: x.split(" ", 1)[1])  # group by technology
+                .sum()  # TOTAL across countries
+                .T
+            )
+        
+        df_generators_pypsa_europe = aggregate_to_europe_total(df_generators_pypsa_monthly)
+        df_combined_europe = aggregate_to_europe_total(df_combined_monthly)
+        
+        
+        df_generators_pypsa_europe_percent = df_generators_pypsa_europe.div(df_generators_pypsa_europe.sum(axis=1), axis=0) * 100
+        df_combined_europe_percent = df_combined_europe.div(df_combined_europe.sum(axis=1), axis=0) * 100
+        
+        
+        
+        # Color mapping for plotting
+        
+        color_dict = n.carriers["color"].to_dict()
+        
+        mapping_color = {
+            "offwind-ac": "Wind Offshore",
+            "offwind-dc": "Wind Offshore",
+            "onwind": "Wind Onshore",
+            "solar": "Solar",
+            "solar-hsat": "Solar",
+            "CCGT": "Fossil Gas",
+            "OCGT": "Fossil Gas",
+            "PHS": "Hydro Pumped Storage Custom",        
+            "biomass": "Biomass",
+            "coal": "Fossil Hard coal",
+            "geothermal": "Geothermal",
+            "hydro": "Hydro Water Reservoir",
+            "lignite": "Fossil Brown coal/Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Fossil Oil",
+            "ror": "Hydro Run-of-river and poundage",
+        }
+        
+        color_dict_new = {}
+
+        for original_name, new_name in mapping_color.items():
+            # Use the color from the original carrier
+            if original_name in color_dict:
+                color_dict_new[new_name] = color_dict[original_name]
+        
+
+
+        if month_plot == True:
+            # Put both dataframes in a dict so we can label them nicely
+            dataframes = {
+                "PyPSA": df_generators_pypsa_monthly,
+                "ENTSO-E": df_combined_monthly,
+                "Difference": df_difference_monthly
+            }
+
+            # Compute y-limits per country using BOTH datasets
+            ylims = {}
+
+            all_countries = sorted({
+                c.split(" ")[0]
+                for df in [df_generators_pypsa_monthly, df_combined_monthly]
+                for c in df.columns
+            })
+
+            for country in all_countries:
+                max_values = []
+
+                for df in [df_generators_pypsa_monthly, df_combined_monthly]:
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+
+                    if not df_country.empty:
+                        # stacked total for area plot
+                        max_values.append(df_country.sum(axis=1).max())
+
+                if max_values:
+                    ylims[country] = max(max_values)
+
+            
+            for label, df in dataframes.items():
+            
+                # Get all unique countries/keys
+                countries = sorted({c.split(" ")[0] for c in df.columns})
+            
+                for country in countries:
+                    # Select columns for this country
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+            
+                    if df_country.empty:
+                        continue
+            
+                    # Build color list
+                    colors = [
+                        color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                        for c in country_cols
+                    ]
+            
+
+                    # Bar Plot
+                    df_plot = df_country
+                    df_plot.index = df_plot.index.strftime('%Y-%m')
+                    ax = df_plot.plot.bar(
+                            figsize=(12, 6),
+                            #title=f"{country} Generation by Technology ({label})",
+                            color=colors,
+                            stacked=True,   # keeps technologies stacked
+                            width=1.0      # <-- this removes horizontal gaps
+                        )
+                    
+                    ax.set_xlabel("")      # removes x-axis label
+                    plt.xticks(rotation=45, ha='right')
+                    ax.set_ylabel("Monthly dispatch [GWh]", fontsize=cap_font)
+                    ax.tick_params(axis='both', labelsize=cap_font)
+                    # Grid: horizontal lines only
+                    ax.grid(False)
+                    ax.yaxis.grid(True, linestyle='-', linewidth=0.8)
+                    ax.xaxis.grid(False)
+                    
+
+                    #if country in ylims:
+                    #    ax.set_ylim(0, ylims[country])
+
+                    if label != "Difference":
+                        if country in ylims:
+                            ax.set_ylim(0, ylims[country])
+                        # Remove legend if it exists
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+
+                        ax.tick_params(axis='x', which='both', labelbottom=False)
+                    else:
+                        # Let matplotlib choose limits automatically
+                        ax.autoscale(enable=True, axis='y')
+                        plt.tight_layout()
+                    
+                        
+                        
+                    # Get legend items WITHOUT plotting legend on main axis
+                        handles, labels_legend = ax.get_legend_handles_labels()
+
+                        # --- Create separate legend figure ---
+                        fig_legend = plt.figure(figsize=(12, 3))
+                        fig_legend.legend(
+                            handles,
+                            labels_legend,
+                            loc='center',
+                            ncol=2,
+                            fontsize=cap_font,
+                        )
+
+                        fig_legend.tight_layout()
+
+                        legend_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "legend"
+                        legend_folder.mkdir(parents=True, exist_ok=True)
+
+                        fig_legend.savefig(legend_folder / f"{country}_legend.pdf")
+                        plt.close(fig_legend)
+
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+            
+            
+                    
+                    #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_monthly.pdf")
+                    plt.close()
+                    
+                    
+        
+            
+        if europe_plot == True:    
+            # Put aggregated Europe dataframes in dict
+            # TWh
+            dataframes_europe = {
+                "PyPSA": df_generators_pypsa_europe/1e3,
+                "ENTSO-E": df_combined_europe/1e3
+            }
+
+            # Compute shared y-limit for Europe using BOTH datasets (already in TWh)
+            max_values = []
+
+            for df in [df_generators_pypsa_europe/1e3, df_combined_europe/1e3]:
+                if not df.empty:
+                    max_values.append(df.sum(axis=1).max())
+
+            europe_ylim = max(max_values) if max_values else None
+
+            
+            for label, df in dataframes_europe.items():
+            
+                if df.empty:
+                    continue
+            
+                # Build color list based on technology names
+                colors = [
+                    color_dict_new.get(col, "#CCCCCC")
+                    for col in df.columns
+                ]
+
+                df_plot = df
+                df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                ax = df_plot.plot.bar(
+                    figsize=(12, 6),
+                    title=f"Europe Total Generation by Technology ({label})",
+                    color=colors,
+                    stacked=True,   # keeps technologies stacked
+                    width=1.0       # removes gaps between bars
+                )
+            
+                plt.xticks(rotation=45, ha='right')
+                ax.set_ylabel("Monthly dispatch [TWh]")
+                ax.set_xlabel("")      # removes x-axis label
+
+                if europe_ylim is not None:
+                    ax.set_ylim(0, europe_ylim)
+
+            
+                ax.legend(
+                    loc='upper center',
+                    bbox_to_anchor=(0.5, -0.15),
+                    ncol=4,
+                    fontsize=10,
+                )
+            
+                plt.tight_layout()
+                plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                plot_folder.mkdir(parents=True, exist_ok=True)
+                plt.savefig(plot_folder / f"{label}_Europe_generator_dispatch_generation_monthly.pdf")
+                plt.close()
+                
+                
+
+
+        if week_plot == True:
+            df_generators_pypsa_weekly = df_generators_pypsa.resample('W').sum()/1e3 
+            df_combined_weekly = df_combined.resample('W').sum()/1e3 
+            month_zoom = [2,3,4]
+            months_str = "_".join(str(m) for m in month_zoom)
+
+
+
+            dataframes = {
+                "PyPSA": df_generators_pypsa_weekly,
+                "ENTSO-E": df_combined_weekly
+            }
+
+            # Compute y-limits per country using BOTH datasets
+            ylims = {}
+
+            all_countries = sorted({
+                c.split(" ")[0]
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]
+                for c in df.columns
+            })
+
+            for country in all_countries:
+                max_values = []
+
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]:
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+
+                    if not df_country.empty:
+                        # stacked total for area plot
+                        max_values.append(df_country.sum(axis=1).max())
+
+                if max_values:
+                    ylims[country] = max(max_values)
+
+            
+            for label, df in dataframes.items():
+            
+                # Get all unique countries/keys
+                countries = sorted({c.split(" ")[0] for c in df.columns})
+            
+                for country in countries:
+                    # Select columns for this country
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+            
+                    if df_country.empty:
+                        continue
+            
+                    # Build color list
+                    colors = [
+                        color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                        for c in country_cols
+                    ]
+            
+                    
+                    # Bar Plot
+                    df_plot = df_country[df_country.index.month.isin(month_zoom)]
+                    df_plot.index = df_plot.index.strftime('%Y-%m-%d')
+                    ax = df_plot.plot.bar(
+                            figsize=(12, 6),
+                            title=f"{country} Generation by Technology ({label})",
+                            color=colors,
+                            stacked=True,   # keeps technologies stacked
+                            width=1.0      # <-- this removes horizontal gaps
+                        )
+                    
+                    ax.set_ylabel("Weekly dispatch [GWh]")
+                    plt.xticks(rotation=45, ha='right')
+                    ax.set_xlabel("")      # removes x-axis label
+                
+
+                    if country in ylims:
+                        ax.set_ylim(0, ylims[country])
+            
+            
+                    ax.legend(
+                        loc='upper center',        # center horizontally
+                        bbox_to_anchor=(0.5, -0.15),  # 0.5 = center, -0.15 = below the axes
+                        ncol=4,                    # number of columns in legend
+                        fontsize=10,
+                    )
+                    #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_weekly_monthzoom_{months_str}.pdf")
+                    plt.close()
+
+
+            "Weekly plot"
+            df_generators_pypsa_weekly = df_generators_pypsa.resample('W').sum()/1e3 
+            df_combined_weekly = df_combined.resample('W').sum()/1e3 
+            df_difference_weekly = df_combined_weekly-df_generators_pypsa_weekly
+
+
+            # Put both dataframes in a dict so we can label them nicely
+            dataframes = {
+                "PyPSA": df_generators_pypsa_weekly,
+                "ENTSO-E": df_combined_weekly,
+                "Difference": df_difference_weekly
+            }
+
+            # Compute y-limits per country using BOTH datasets
+            ylims = {}
+
+            all_countries = sorted({
+                c.split(" ")[0]
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]
+                for c in df.columns
+            })
+
+            for country in all_countries:
+                max_values = []
+
+                for df in [df_generators_pypsa_weekly, df_combined_weekly]:
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+
+                    if not df_country.empty:
+                        # stacked total for area plot
+                        max_values.append(df_country.sum(axis=1).max())
+
+                if max_values:
+                    ylims[country] = max(max_values)
+
+            
+            for label, df in dataframes.items():
+            
+                # Get all unique countries/keys
+                countries = sorted({c.split(" ")[0] for c in df.columns})
+            
+                for country in countries:
+                    # Select columns for this country
+                    country_cols = [c for c in df.columns if c.startswith(country + " ")]
+                    df_country = df[country_cols]
+            
+                    if df_country.empty:
+                        continue
+            
+                    # Build color list
+                    colors = [
+                        color_dict_new.get(c.split(" ", 1)[1], "#CCCCCC")
+                        for c in country_cols
+                    ]
+            
+
+                    df_plot = df_country.copy()
+
+                    # Keep original datetime separately
+                    dates = pd.to_datetime(df_plot.index)
+
+                    # Force categorical positions
+                    df_plot.index = range(len(df_plot))
+
+                    ax = df_plot.plot.bar(
+                        figsize=(12, 6),
+                        color=colors,
+                        stacked=True,
+                        width=1.0
+                    )
+
+                    # ---- Month change detection (using original dates) ----
+                    month_starts = dates.to_series().dt.to_period("M").ne(
+                        dates.to_series().dt.to_period("M").shift()
+                    )
+
+                    tick_positions = np.where(month_starts)[0]
+                    tick_labels = dates[month_starts].strftime('%Y-%m')
+
+                    ax.set_xticks(tick_positions)
+                    ax.set_xticklabels(tick_labels, rotation=45, ha='right')
+
+                    ax.set_xlabel("")
+                    ax.set_ylabel("Weekly dispatch [GWh]", fontsize=cap_font)
+                    ax.tick_params(axis='both', labelsize=cap_font)
+
+                    ax.grid(False)
+                    ax.yaxis.grid(True, linestyle='-', linewidth=0.8)
+                    ax.xaxis.grid(False)
+
+
+                    #if country in ylims:
+                    #    ax.set_ylim(0, ylims[country])
+
+                    if label != "Difference":
+                        if country in ylims:
+                            ax.set_ylim(0, ylims[country])
+                        # Remove legend if it exists
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+
+                        ax.tick_params(axis='x', which='both', labelbottom=False)
+                    else:
+                        # Let matplotlib choose limits automatically
+                        ax.autoscale(enable=True, axis='y')
+                        ax.set_ylabel("Weekly dispatch difference [GWh]", fontsize=cap_font)
+                        plt.tight_layout()
+                    
+                        
+                        
+                    # Get legend items WITHOUT plotting legend on main axis
+                        handles, labels_legend = ax.get_legend_handles_labels()
+
+                        # --- Create separate legend figure ---
+                        fig_legend = plt.figure(figsize=(12, 3))
+                        fig_legend.legend(
+                            handles,
+                            labels_legend,
+                            loc='center',
+                            ncol=2,
+                            fontsize=cap_font,
+                        )
+
+                        fig_legend.tight_layout()
+
+                        legend_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "legend"
+                        legend_folder.mkdir(parents=True, exist_ok=True)
+
+                        fig_legend.savefig(legend_folder / f"{country}_legend.pdf")
+                        plt.close(fig_legend)
+
+                        if ax.get_legend() is not None:
+                            ax.get_legend().remove()
+            
+            
+                    
+                    #plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+                    plt.tight_layout()
+                    plot_folder = self.network_file_res_dir / "summary" / "dispatch" / label / "generation"
+                    plot_folder.mkdir(parents=True, exist_ok=True)
+                    plt.savefig(plot_folder / f"{label}_{country}_generator_dispatch_generation_weekly.pdf")
+                    plt.close()
+
     def plot_all_figures(self):
         """Generate and save standard analysis plots per bus."""
 
@@ -1121,15 +1832,16 @@ class NetworkAnalyzer:
             bus_folder.mkdir(parents=True, exist_ok=True)
 
             # Plot installed capacity
-            self.plot_installed_capacity(bus)  # Plot installed capacity
-            self.plot_load(bus)  # Plot electric load
-            self.plot_generation_dispatch_annual(bus)  # Plot generation dispatch annual
-            self.plot_electricity_price(bus)  # Plot electricity price
-            self.plot_total_dispatch(bus)  # Plot total dispatch
-            self.plot_generation_dispatch_conventional(bus)  # Plot fossil dispatch
-            self.plot_co2_emissions_per_bus(bus)  # Plot CO2 emissions
-            self.plot_generation_mix_annual(bus)  # Plot annual generation mix
-            self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
-            self.plot_hydro_analysis(bus)  # Plot hydro analysis
+            #self.plot_installed_capacity(bus)  # Plot installed capacity
+            #self.plot_load(bus)  # Plot electric load
+            #self.plot_generation_dispatch_annual(bus)  # Plot generation dispatch annual
+            #self.plot_electricity_price(bus)  # Plot electricity price
+            #self.plot_total_dispatch(bus)  # Plot total dispatch
+            #self.plot_generation_dispatch_conventional(bus)  # Plot fossil dispatch
+            #self.plot_co2_emissions_per_bus(bus)  # Plot CO2 emissions
+            #self.plot_generation_mix_annual(bus)  # Plot annual generation mix
+            #self.plot_generation_comparison_all(bus)  # Plot generation comparison with external data
+            #self.plot_hydro_analysis(bus)  # Plot hydro analysis
             # self.plot_CO2_intensity_comparison_all(bus)  # Plot CO2 emissions comparison with external data
-            self.plot_total_dispatch_all_buses()
+            #self.plot_total_dispatch_all_buses()
+        self.plot_EUR_country_generation_function()

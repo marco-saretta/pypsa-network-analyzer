@@ -572,7 +572,7 @@ class ResultsPlotter:
 
         print(f"Saved: {output_path}")
 
-    def plot_prices(
+    def plot_prices_old(
         self, x_length=8, resampling_rule="D", countries_list=["DE", "ES", "IT", "FR", "DK", "NO"], rolling_window=None
     ):
         """Plot benchmark vs simulations per country."""
@@ -612,7 +612,9 @@ class ResultsPlotter:
 
                 ax.legend(frameon=True)
                 ax.set_title(f"{country} – Electricity Prices Daily resample", loc="left", fontsize=14, pad=20)
-                ax.set_xlim(left=series.index.min(), right=series.index.max())
+                #ax.set_xlim(left=series.index.min(), right=series.index.max())
+                ax.set_xlim(pd.Timestamp("2022-01-01"),pd.Timestamp("2022-12-31"))
+                ax.set_xticks([])
                 # ax.set_ylim(bottom=0)
                 ax.set_ylabel("EUR/MWh")
                 ax.grid(True, linestyle="dashed", alpha=0.5)
@@ -624,6 +626,86 @@ class ResultsPlotter:
             plt.close()
 
             print(f"Saved: {output_path}")
+
+    def plot_prices(
+        self,
+        x_length=8,
+        resampling_rule="D",
+        countries_list=["DE", "ES", "IT", "FR", "DK", "NO"],
+        rolling_window=None,
+        ):
+
+        plot_order = [
+            "benchmark",
+            "hindcast-std",
+            "hindcast-dyn",
+            "hindcast-dyn-rolling",
+        ]
+
+        # Two xlim modes
+        xlim_modes = {
+            "all years": "auto",   # dynamic min/max
+            "2022": "fixed",  # fixed 2022 range
+        }
+
+        for country in countries_list:
+            for mode, xlim_type in xlim_modes.items():
+
+                fig, ax = plt.subplots(figsize=(x_length, x_length / self.phi))
+
+                for label in plot_order:
+                    if label not in self.prices_dict:
+                        continue
+
+                    df = self.prices_dict[label]
+
+                    if country not in df.columns:
+                        continue
+
+                    series = df[country]
+
+                    if resampling_rule:
+                        series = series.resample(resampling_rule).mean()
+
+                    ax.plot(
+                        series.index,
+                        series,
+                        label="Benchmark" if label == "benchmark" else label,
+                        color=self.sim_color[label],
+                    )
+
+                # ---- X-LIMIT HANDLING ----
+                if xlim_type == "auto":
+                    ax.set_xlim(series.index.min(), series.index.max())
+                elif xlim_type == "fixed":
+                    ax.set_xlim(
+                        pd.Timestamp("2022-01-01"),
+                        pd.Timestamp("2022-12-31"),
+                    )
+                    ax.set_xticks([])
+
+                ax.set_title(
+                    f"{country} – Electricity Prices ({mode})",
+                    loc="left",
+                    fontsize=14,
+                    pad=20,
+                )
+                
+                ax.set_ylabel("EUR/MWh")
+                ax.grid(True, linestyle="dashed", alpha=0.5)
+                ax.legend(frameon=True)
+
+                plt.tight_layout()
+
+                output_path = (
+                    self.figures_dir
+                    / f"price_{country}_{mode}.{self.export_format}"
+                )
+
+                plt.savefig(output_path)
+                plt.close()
+
+                print(f"Saved: {output_path}")
 
     def plot_europe_prices(
         self,
