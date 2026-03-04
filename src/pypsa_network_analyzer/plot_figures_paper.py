@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib as mpl
 import seaborn as sns
+import pypsa
 
 
 class ResultsPlotter:
@@ -638,8 +639,8 @@ class ResultsPlotter:
         resampling_rule="D",
         sim_labels=None,
         rolling_window=None,
-        load_shedding_label="hindcast-dyn-rolling",
-    ):
+        load_shedding_label="hindcast-dyn-rolling"
+        ):
         """
         Plot Europe reference price (europe_price_ref) and per-simulation europe_price.
         Generates two plots: filtered and unfiltered electricity prices.
@@ -796,33 +797,149 @@ class ResultsPlotter:
             plt.close()
             print(f"Saved: {output_path}")
 
-    def plot_DE_ES_plot(self):
-        fig, ax = plt.subplot()
+    def plot_DE_ES_plot(
+            self,
+            x_length: float = 8,
+            resampling_rule: str | None = "D",
+            countries_list: list[str] = None,
+            start_date: pd.Timestamp = "2022-01-01",
+            end_date: pd.Timestamp = "2023-01-01",
+            network_file = "hindcast-dyn-rolling-wy2022.nc"
+            ):
+        """Plot benchmark vs simulations per country."""
+
+        if countries_list is None:
+            countries_list = ["DE", "ES"]
+
+        plot_order = [
+            "benchmark",
+            "hindcast-std",
+            "hindcast-dyn",
+            "hindcast-dyn-rolling",
+        ]
+
+        # Make filter dates timezone-NAIVE to match your df.index
+        start_date = pd.Timestamp(start_date)
+        end_date = pd.Timestamp(end_date)
         
-        plt.show()
-        
+        for country in countries_list:
+            fig, axs = plt.subplots(
+                ncols=1,
+                nrows=3,
+                figsize=(x_length, x_length * self.phi),
+                sharex=False,
+            )
+
+            for label in plot_order:
+                if label not in self.prices_dict:
+                    continue
+                df = self.prices_dict[label]
+                
+                # Match timezone of filter dates to the df's index
+                if df.index.tz is not None:
+                    _start = start_date.tz_localize("UTC") if start_date.tzinfo is None else start_date
+                    _end = end_date.tz_localize("UTC") if end_date.tzinfo is None else end_date
+                else:
+                    _start = start_date.tz_localize(None) if start_date.tzinfo is not None else start_date
+                    _end = end_date.tz_localize(None) if end_date.tzinfo is not None else end_date
+                
+                df = df[(_start <= df.index) & (df.index <= _end)]
+
+                if country not in df.columns:
+                    continue
+
+                series = df[country]
+
+                if resampling_rule:
+                    series = series.resample(resampling_rule).mean()
+
+                # Top plot
+                if label == "benchmark":
+                    axs[0].plot(
+                        series.index,
+                        series,
+                        label=label,
+                        color=self.sim_color[label])
+                    
+                else:
+                    axs[0].plot(
+                        series.index,
+                        series,
+                        label=label,
+                        color=self.sim_color.get(label, None),
+                    )
+
+            # Configure top axis once, after plotting
+            legend_label_map = {
+                "benchmark": "Historical",
+                "hindcast-std": "Hindcast-static",
+                "hindcast-dyn": "Hindcast-dynamic",
+                "hindcast-dyn-rolling": "Hindcast-dynamic-rolling horizon",
+            }
+
+            desired_order = [
+                "benchmark",
+                "hindcast-std",
+                "hindcast-dyn",
+                "hindcast-dyn-rolling",
+            ]
+
+            handles, labels = axs[0].get_legend_handles_labels()
+            handle_map = dict(zip(labels, handles))
+            ordered_handles = [handle_map[k] for k in desired_order if k in handle_map]
+            ordered_labels = [legend_label_map.get(k, k) for k in desired_order if k in handle_map]
+
+            axs[0].legend(
+                ordered_handles,
+                ordered_labels,
+                frameon=True,
+                loc="upper center",
+                ncol=2,
+                bbox_to_anchor=(0.5, 1.3),
+                fancybox=True,
+            )
+            axs[0].set_xlim(left=start_date, right=end_date)
+            axs[0].set_ylim(bottom=0, top=650)
+            axs[0].set_ylabel("EUR/MWh")
+            axs[0].grid(True, linestyle="dashed", alpha=0.5)
+            axs[-1].set_xlabel("Date")
+
+            # Middle plot
+            n = pypsa.Network(self.data_dir / 'network_files' / network_file)
+            #axs[1].plot(...)
+
+            # Bottom plot
+            axs[2].plot(n.statistics.supply(groupby_time=False))
+            
+            
+            
+            #plt.tight_layout()
+            output_path = self.figures_dir / f"that_plot_{country}.{self.export_format}"
+            plt.savefig(output_path)
+            plt.close(fig)
+
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
 
         # Print boxplot per country across sims
-        self.plot_boxplot_per_country()
+        #self.plot_boxplot_per_country()
 
         # Print scatter plot per country across sims
-        self.plot_yearly_values_per_country()
+        #self.plot_yearly_values_per_country()
 
         # Print single boxplot for error metrics
-        self.plot_error_by_simulation_and_year_all(x_length=6)
+        #self.plot_error_by_simulation_and_year_all(x_length=6)
 
         # Plot individual boxplot for simulation per year
-        for error_metric in self.error_list:
-           self.plot_error_by_simulation_and_year(error_metric, x_length=7)
+        #for error_metric in self.error_list:
+        #   self.plot_error_by_simulation_and_year(error_metric, x_length=7)
 
         # Plot price simulations
-        self.plot_prices()
+        #self.plot_prices()
 
         # Plot Europe price reference + simulations
-        self.plot_europe_prices()
+        #self.plot_europe_prices()
         
         # Adjust that plot
         self.plot_DE_ES_plot()
