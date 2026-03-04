@@ -796,28 +796,36 @@ class ResultsPlotter:
             plt.close()
             print(f"Saved: {output_path}")
 
+    def plot_DE_ES_plot(self):
+        fig, ax = plt.subplot()
+        
+        plt.show()
+        
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
 
         # Print boxplot per country across sims
-        # self.plot_boxplot_per_country()
+        self.plot_boxplot_per_country()
 
         # Print scatter plot per country across sims
-        # self.plot_yearly_values_per_country()
+        self.plot_yearly_values_per_country()
 
         # Print single boxplot for error metrics
         self.plot_error_by_simulation_and_year_all(x_length=6)
 
         # Plot individual boxplot for simulation per year
-        # for error_metric in self.error_list:
-        #    self.plot_error_by_simulation_and_year(error_metric, x_length=7)
+        for error_metric in self.error_list:
+           self.plot_error_by_simulation_and_year(error_metric, x_length=7)
 
         # Plot price simulations
-        # self.plot_prices()
+        self.plot_prices()
 
         # Plot Europe price reference + simulations
-        # self.plot_europe_prices()
+        self.plot_europe_prices()
+        
+        # Adjust that plot
+        self.plot_DE_ES_plot()
 
         print("All plots generated successfully!")
 
