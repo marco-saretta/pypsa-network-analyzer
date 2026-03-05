@@ -639,8 +639,8 @@ class ResultsPlotter:
         resampling_rule="D",
         sim_labels=None,
         rolling_window=None,
-        load_shedding_label="hindcast-dyn-rolling"
-        ):
+        load_shedding_label="hindcast-dyn-rolling",
+    ):
         """
         Plot Europe reference price (europe_price_ref) and per-simulation europe_price.
         Generates two plots: filtered and unfiltered electricity prices.
@@ -798,14 +798,14 @@ class ResultsPlotter:
             print(f"Saved: {output_path}")
 
     def plot_DE_ES_plot(
-            self,
-            x_length: float = 8,
-            resampling_rule: str | None = "D",
-            countries_list: list[str] = None,
-            start_date: pd.Timestamp = "2022-01-01",
-            end_date: pd.Timestamp = "2023-01-01",
-            network_file = "hindcast-dyn-rolling-wy2022.nc"
-            ):
+        self,
+        x_length: float = 8,
+        resampling_rule: str | None = "D",
+        countries_list: list[str] = None,
+        start_date: pd.Timestamp = "2022-01-01",
+        end_date: pd.Timestamp = "2023-01-01",
+        network_file="hindcast-dyn-rolling-wy2022.nc",
+    ):
         """Plot benchmark vs simulations per country."""
 
         if countries_list is None:
@@ -821,20 +821,20 @@ class ResultsPlotter:
         # Make filter dates timezone-NAIVE to match your df.index
         start_date = pd.Timestamp(start_date)
         end_date = pd.Timestamp(end_date)
-        
+
         for country in countries_list:
             fig, axs = plt.subplots(
                 ncols=1,
                 nrows=3,
                 figsize=(x_length, x_length * self.phi),
-                sharex=False,
+                sharex=True,
             )
 
             for label in plot_order:
                 if label not in self.prices_dict:
                     continue
                 df = self.prices_dict[label]
-                
+
                 # Match timezone of filter dates to the df's index
                 if df.index.tz is not None:
                     _start = start_date.tz_localize("UTC") if start_date.tzinfo is None else start_date
@@ -842,7 +842,7 @@ class ResultsPlotter:
                 else:
                     _start = start_date.tz_localize(None) if start_date.tzinfo is not None else start_date
                     _end = end_date.tz_localize(None) if end_date.tzinfo is not None else end_date
-                
+
                 df = df[(_start <= df.index) & (df.index <= _end)]
 
                 if country not in df.columns:
@@ -855,12 +855,8 @@ class ResultsPlotter:
 
                 # Top plot
                 if label == "benchmark":
-                    axs[0].plot(
-                        series.index,
-                        series,
-                        label=label,
-                        color=self.sim_color[label])
-                    
+                    axs[0].plot(series.index, series, label=label, color=self.sim_color[label])
+
                 else:
                     axs[0].plot(
                         series.index,
@@ -905,15 +901,36 @@ class ResultsPlotter:
             axs[-1].set_xlabel("Date")
 
             # Middle plot
-            n = pypsa.Network(self.data_dir / 'network_files' / network_file)
-            #axs[1].plot(...)
+            n = pypsa.Network(self.data_dir / "network_files" / network_file)
+
+            total_dispatch = (
+                n.statistics.supply(groupby=["bus", "carrier"], groupby_time=False) / 1000
+            )  # Take all dispatch info in GW
+            raw_country_dispatch_T = total_dispatch.xs(country, level="bus")  # Extract bus info
+            raw_country_components_dispatch = raw_country_dispatch_T.loc[
+                ["Generator", "StorageUnit"], :
+            ]  # Isolate gen and hydro units
+            raw_country_dispatch = raw_country_components_dispatch.T.droplevel(0, axis=1)  # Remove multi index
+
+            if resampling_rule:
+                raw_country_dispatch = raw_country_dispatch.resample(
+                    resampling_rule
+                ).sum()  # Same resampling rulu for consistency
+
+            axs[1].plot(raw_country_dispatch)
+            axs[1].set_ylabel(f"PyPSA dispatch resampled {resampling_rule} [GWh]")
 
             # Bottom plot
-            axs[2].plot(n.statistics.supply(groupby_time=False))
-            
-            
-            
-            #plt.tight_layout()
+
+            entsoe_data = pd.read_csv(
+                self.data_dir / "generation" / f"generation_{country}_hourly_data.csv",
+                index_col=0,
+                parse_dates=True,  # Fixed: plural "parse_dates"
+            )
+
+            axs[2].plot(entsoe_data)
+
+            # plt.tight_layout()
             output_path = self.figures_dir / f"that_plot_{country}.{self.export_format}"
             plt.savefig(output_path)
             plt.close(fig)
@@ -923,24 +940,24 @@ class ResultsPlotter:
         print("Generating plots...")
 
         # Print boxplot per country across sims
-        #self.plot_boxplot_per_country()
+        # self.plot_boxplot_per_country()
 
         # Print scatter plot per country across sims
-        #self.plot_yearly_values_per_country()
+        # self.plot_yearly_values_per_country()
 
         # Print single boxplot for error metrics
-        #self.plot_error_by_simulation_and_year_all(x_length=6)
+        # self.plot_error_by_simulation_and_year_all(x_length=6)
 
         # Plot individual boxplot for simulation per year
-        #for error_metric in self.error_list:
+        # for error_metric in self.error_list:
         #   self.plot_error_by_simulation_and_year(error_metric, x_length=7)
 
         # Plot price simulations
-        #self.plot_prices()
+        # self.plot_prices()
 
         # Plot Europe price reference + simulations
-        #self.plot_europe_prices()
-        
+        # self.plot_europe_prices()
+
         # Adjust that plot
         self.plot_DE_ES_plot()
 
