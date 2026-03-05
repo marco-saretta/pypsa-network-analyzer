@@ -8,6 +8,7 @@ import matplotlib.dates as mdates
 import matplotlib as mpl
 import seaborn as sns
 import pypsa
+import numpy as np
 
 
 class ResultsPlotter:
@@ -639,8 +640,7 @@ class ResultsPlotter:
         resampling_rule="D",
         sim_labels=None,
         rolling_window=None,
-        load_shedding_label="hindcast-dyn-rolling",
-    ):
+        load_shedding_label="hindcast-dyn-rolling",    ):
         """
         Plot Europe reference price (europe_price_ref) and per-simulation europe_price.
         Generates two plots: filtered and unfiltered electricity prices.
@@ -800,12 +800,12 @@ class ResultsPlotter:
     def plot_DE_ES_plot(
         self,
         x_length: float = 8,
-        resampling_rule: str | None = "D",
+        resampling_rule: str | None = "W",
         countries_list: list[str] = None,
         start_date: pd.Timestamp = "2022-01-01",
         end_date: pd.Timestamp = "2023-01-01",
         network_file="hindcast-dyn-rolling-wy2022.nc",
-    ):
+        ):
         """Plot benchmark vs simulations per country."""
 
         if countries_list is None:
@@ -818,16 +818,36 @@ class ResultsPlotter:
             "hindcast-dyn-rolling",
         ]
 
-        # Make filter dates timezone-NAIVE to match your df.index
         start_date = pd.Timestamp(start_date)
         end_date = pd.Timestamp(end_date)
+
+
+        # Mapping PyPSA carriers -> standardised names
+        mapping_pypsa_carriers = {
+            "Combined-Cycle Gas": "Fossil Gas",
+            "Load shedding": None,
+            "Offshore Wind (AC)": "Wind Offshore",
+            "Offshore Wind (DC)": "Wind Offshore",
+            "Onshore Wind": "Wind Onshore",
+            "Open-Cycle Gas": "Fossil Gas",
+            "Run of River": "Hydro Run-of-river and poundage",
+            "Solar": "Solar",
+            "biomass": "Biomass",
+            "nuclear": "Nuclear",
+            "coal": "Fossil Hard coal",
+            "lignite": "Fossil Brown coal/Lignite",
+            "oil": "Fossil Oil",
+            "solar-hsat": "Solar",
+            "Pumped Hydro Storage": "Hydro Pumped Storage",
+            "Reservoir & Dam": "Hydro Water Reservoir",
+        }
 
         for country in countries_list:
             fig, axs = plt.subplots(
                 ncols=1,
                 nrows=3,
                 figsize=(x_length, x_length * self.phi),
-                sharex=True,
+                sharex=True,  # x-axis differs between bar and line plots
             )
 
             for label in plot_order:
@@ -835,102 +855,186 @@ class ResultsPlotter:
                     continue
                 df = self.prices_dict[label]
 
-                # Match timezone of filter dates to the df's index
                 if df.index.tz is not None:
                     _start = start_date.tz_localize("UTC") if start_date.tzinfo is None else start_date
-                    _end = end_date.tz_localize("UTC") if end_date.tzinfo is None else end_date
+                    _end   = end_date.tz_localize("UTC")   if end_date.tzinfo is None   else end_date
                 else:
                     _start = start_date.tz_localize(None) if start_date.tzinfo is not None else start_date
-                    _end = end_date.tz_localize(None) if end_date.tzinfo is not None else end_date
+                    _end   = end_date.tz_localize(None)   if end_date.tzinfo is not None   else end_date
 
                 df = df[(_start <= df.index) & (df.index <= _end)]
-
                 if country not in df.columns:
                     continue
 
                 series = df[country]
-
                 if resampling_rule:
                     series = series.resample(resampling_rule).mean()
 
-                # Top plot
-                if label == "benchmark":
-                    axs[0].plot(series.index, series, label=label, color=self.sim_color[label])
+                axs[0].plot(series.index, series, label=label, color=self.sim_color.get(label, None))
 
-                else:
-                    axs[0].plot(
-                        series.index,
-                        series,
-                        label=label,
-                        color=self.sim_color.get(label, None),
-                    )
-
-            # Configure top axis once, after plotting
             legend_label_map = {
-                "benchmark": "Historical",
-                "hindcast-std": "Hindcast-static",
-                "hindcast-dyn": "Hindcast-dynamic",
+                "benchmark":            "Historical",
+                "hindcast-std":         "Hindcast-static",
+                "hindcast-dyn":         "Hindcast-dynamic",
                 "hindcast-dyn-rolling": "Hindcast-dynamic-rolling horizon",
             }
-
-            desired_order = [
-                "benchmark",
-                "hindcast-std",
-                "hindcast-dyn",
-                "hindcast-dyn-rolling",
-            ]
-
+            desired_order = ["benchmark", "hindcast-std", "hindcast-dyn", "hindcast-dyn-rolling"]
             handles, labels = axs[0].get_legend_handles_labels()
-            handle_map = dict(zip(labels, handles))
+            handle_map      = dict(zip(labels, handles))
             ordered_handles = [handle_map[k] for k in desired_order if k in handle_map]
-            ordered_labels = [legend_label_map.get(k, k) for k in desired_order if k in handle_map]
+            ordered_labels  = [legend_label_map.get(k, k) for k in desired_order if k in handle_map]
 
-            axs[0].legend(
-                ordered_handles,
-                ordered_labels,
-                frameon=True,
-                loc="upper center",
-                ncol=2,
-                bbox_to_anchor=(0.5, 1.3),
-                fancybox=True,
-            )
+            axs[0].legend(ordered_handles, ordered_labels, frameon=True,
+                        loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.3), fancybox=True)
             axs[0].set_xlim(left=start_date, right=end_date)
             axs[0].set_ylim(bottom=0, top=650)
             axs[0].set_ylabel("EUR/MWh")
             axs[0].grid(True, linestyle="dashed", alpha=0.5)
-            axs[-1].set_xlabel("Date")
 
             # Middle plot
             n = pypsa.Network(self.data_dir / "network_files" / network_file)
 
-            total_dispatch = (
-                n.statistics.supply(groupby=["bus", "carrier"], groupby_time=False) / 1000
-            )  # Take all dispatch info in GW
-            raw_country_dispatch_T = total_dispatch.xs(country, level="bus")  # Extract bus info
-            raw_country_components_dispatch = raw_country_dispatch_T.loc[
-                ["Generator", "StorageUnit"], :
-            ]  # Isolate gen and hydro units
-            raw_country_dispatch = raw_country_components_dispatch.T.droplevel(0, axis=1)  # Remove multi index
+            supply_stats = n.statistics.supply(groupby=["bus", "carrier"], groupby_time=False) / 1000
+            country_supply = supply_stats.xs(country, level="bus")
+            country_generators_and_storage = country_supply.loc[["Generator", "StorageUnit"], :]
+            country_dispatch_raw = country_generators_and_storage.T.droplevel(0, axis=1)
+
+            ignored_carriers = [col for col, target in mapping_pypsa_carriers.items()
+                                if target is None and col in country_dispatch_raw.columns]
+            country_dispatch_raw = country_dispatch_raw.drop(columns=ignored_carriers)
+
+            carrier_rename = {col: target for col, target in mapping_pypsa_carriers.items()
+                            if target is not None and col in country_dispatch_raw.columns}
+            country_dispatch = country_dispatch_raw.rename(columns=carrier_rename)
+            country_dispatch = country_dispatch.T.groupby(level=0).sum().T  # merge duplicate cols
 
             if resampling_rule:
-                raw_country_dispatch = raw_country_dispatch.resample(
-                    resampling_rule
-                ).sum()  # Same resampling rulu for consistency
+                country_dispatch_res = country_dispatch.resample(resampling_rule).sum()
+            else:
+                country_dispatch_res = country_dispatch
 
-            axs[1].plot(raw_country_dispatch)
+            country_dispatch_res.plot.bar(stacked=True, width=1.0, ax=axs[1])
             axs[1].set_ylabel(f"PyPSA dispatch resampled {resampling_rule} [GWh]")
+            axs[1].grid(False)
+            axs[1].yaxis.grid(True, linestyle='-', linewidth=0.8)
+            axs[1].xaxis.grid(False)
 
             # Bottom plot
 
-            entsoe_data = pd.read_csv(
+            entsoe_raw = pd.read_csv(
                 self.data_dir / "generation" / f"generation_{country}_hourly_data.csv",
                 index_col=0,
-                parse_dates=True,  # Fixed: plural "parse_dates"
+                parse_dates=True,
             )
 
-            axs[2].plot(entsoe_data)
+            # Timezone alignment
+            if entsoe_raw.index.tz is not None:
+                _start = start_date.tz_localize("UTC") if start_date.tzinfo is None else start_date
+                _end   = end_date.tz_localize("UTC")   if end_date.tzinfo is None   else end_date
+            else:
+                _start = start_date.tz_localize(None) if start_date.tzinfo is not None else start_date
+                _end   = end_date.tz_localize(None)   if end_date.tzinfo is not None   else end_date
 
-            # plt.tight_layout()
+            entsoe_filtered = entsoe_raw[(_start <= entsoe_raw.index) & (entsoe_raw.index <= _end)]
+
+            # Parse tuple-like column names -> keep only 'Actual Aggregated', except Pumped Hydro
+            def parse_entsoe_col(col_str):
+                """Return (carrier, aggregation_type) from a string like \"('Fossil Gas', 'Actual Aggregated')\"."""
+                col_str = col_str.strip().strip("'\"() ")
+                parts   = [p.strip().strip("'\" ") for p in col_str.split(",", 1)]
+                return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
+
+            # Build clean ENTSO-E dataframe with standardised carrier columns
+            entsoe_carriers = {}  # carrier_name -> list of series to sum
+
+            for col in entsoe_filtered.columns:
+                carrier, agg_type = parse_entsoe_col(col)
+
+                if carrier == "Hydro Pumped Storage":
+                    # Keep charge and discharge separated
+                    if "Aggregated" in agg_type:
+                        label_col = "Hydro Pumped Storage (generation)"
+                    elif "Consumption" in agg_type:
+                        label_col = "Hydro Pumped Storage (consumption)"
+                    else:
+                        continue
+                else:
+                    # For all other carriers keep only Actual Aggregated
+                    if "Aggregated" not in agg_type:
+                        continue
+                    label_col = carrier  # use the standardised ENTSO-E carrier name directly
+
+                entsoe_carriers.setdefault(label_col, []).append(entsoe_filtered[col])
+
+            entsoe_dispatch = pd.DataFrame(
+                {col: pd.concat(series_list, axis=1).sum(axis=1)
+                for col, series_list in entsoe_carriers.items()}
+            )
+
+            # Convert MW -> GWh (hourly data: MWh per hour / 1000)
+            entsoe_dispatch = entsoe_dispatch / 1000
+
+            if resampling_rule:
+                entsoe_dispatch_res = entsoe_dispatch.resample(resampling_rule).sum()
+            else:
+                entsoe_dispatch_res = entsoe_dispatch
+
+            # Align columns: map ENTSO-E standard names -> PyPSA standard names for comparison
+            # (Pumped Hydro generation maps to the same carrier; consumption kept separate)
+            entsoe_to_pypsa_name = {
+                "Biomass":                              "Biomass",
+                "Fossil Brown coal/Lignite":            "Fossil Brown coal/Lignite",
+                "Fossil Coal-derived gas":              "Fossil Hard coal",
+                "Fossil Gas":                           "Fossil Gas",
+                "Fossil Hard coal":                     "Fossil Hard coal",
+                "Fossil Oil":                           "Fossil Oil",
+                "Fossil Oil shale":                     "Fossil Oil",
+                "Fossil Peat":                          "Fossil Hard coal",
+                "Geothermal":                           "Geothermal",
+                "Hydro Pumped Storage (generation)":    "Hydro Pumped Storage",
+                "Hydro Pumped Storage (consumption)":   "Hydro Pumped Storage (consumption)",
+                "Hydro Run-of-river and poundage":      "Hydro Run-of-river and poundage",
+                "Hydro Water Reservoir":                "Hydro Water Reservoir",
+                "Nuclear":                              "Nuclear",
+                "Other":                                "Other",
+                "Other renewable":                      "Other",
+                "Solar":                                "Solar",
+                "Waste":                                "Biomass",
+                "Wind Offshore":                        "Wind Offshore",
+                "Wind Onshore":                         "Wind Onshore",
+            }
+
+            entsoe_dispatch_renamed = entsoe_dispatch_res.rename(columns=entsoe_to_pypsa_name)
+            entsoe_dispatch_renamed = entsoe_dispatch_renamed.T.groupby(level=0).sum().T  # merge duplicates
+
+            # Align both dataframes to the same columns and index
+            common_carriers = country_dispatch_res.columns.intersection(entsoe_dispatch_renamed.columns)
+            pypsa_aligned   = country_dispatch_res[common_carriers].reindex(entsoe_dispatch_renamed.index)
+            entsoe_aligned  = entsoe_dispatch_renamed[common_carriers]
+
+            dispatch_diff = entsoe_aligned - pypsa_aligned  # ENTSO-E minus PyPSA
+
+            # Plot diff with same monthly tick logic
+            dispatch_diff.plot.bar(stacked=True, width=1.0, ax=axs[2], legend=True)
+
+            monthly_ticks_bottom = {}
+            for i, ts in enumerate(dispatch_diff.index):
+                month_key = (ts.year, ts.month)
+                if month_key not in monthly_ticks_bottom:
+                    monthly_ticks_bottom[month_key] = (i, ts.strftime("%b"))
+
+            tick_positions_bottom = [pos for pos, _ in monthly_ticks_bottom.values()]
+            tick_labels_bottom    = [lbl for _, lbl in monthly_ticks_bottom.values()]
+
+            #axs[2].set_xticks(tick_positions_bottom)
+            #axs[2].set_xticklabels(tick_labels_bottom, rotation=45, ha="right", fontsize=8)
+            #axs[2].axhline(0, color="black", linewidth=0.8)
+            #axs[2].set_ylabel("ENTSO-E − PyPSA [GWh]")
+            #axs[2].set_xlabel("Date")
+            #axs[2].grid(False)
+            #axs[2].yaxis.grid(True, linestyle="-", linewidth=0.8)
+
+            plt.tight_layout()
             output_path = self.figures_dir / f"that_plot_{country}.{self.export_format}"
             plt.savefig(output_path)
             plt.close(fig)
