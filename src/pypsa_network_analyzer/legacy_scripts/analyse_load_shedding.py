@@ -10,7 +10,7 @@ from matplotlib.legend_handler import HandlerBase
 
 # %%
 file_dir = Path(__file__).parent.parent.parent.parent.resolve()
-network_2024_path = f"{file_dir}/data/network_files_sarah3/hindcast-dyn-rolling-wy2024.nc"
+network_2024_path = f"{file_dir}/data/network_files_sarah3_rc/hindcast-dyn-rolling-wy2024.nc"
 n= pypsa.Network(network_2024_path)
 
 # %%
@@ -56,7 +56,7 @@ for year in years:
     print(f"Processing {year}...")
     
     # Load network
-    network_path = f"{file_dir}/data/network_files_sarah3/hindcast-dyn-rolling-wy{year}.nc"
+    network_path = f"{file_dir}/data/network_files_sarah3_rc/hindcast-dyn-rolling-wy{year}.nc"
     n = pypsa.Network(network_path)
     
     # Get generation statistics
@@ -280,4 +280,8 @@ if 'NO' in ls.columns and 'NO' in load.columns:
     plt.grid()
     plt.tight_layout()
     plt.show()
+# %%
+
+
+# 
 # %%
