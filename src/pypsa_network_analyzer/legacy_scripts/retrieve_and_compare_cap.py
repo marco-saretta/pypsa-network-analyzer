@@ -200,7 +200,7 @@ def plot_capacity_comparison(
 
     plt.tight_layout()
 
-    path = file_dir / "capacity_comparison_plots"
+    path = file_dir / "figures_paper" / "capacity_comparison_plots"
     path.mkdir(exist_ok=True)
     plt.savefig(path / f"{country}_capacity_comparison.png", dpi=300)
 
@@ -259,7 +259,7 @@ def plot_capacity_all_countries_by_carrier(
 
     plt.tight_layout()
 
-    path = file_dir / "capacity_comparison_plots"
+    path = file_dir / "figures_paper" / "capacity_comparison_plots"
     path.mkdir(exist_ok=True)
     plt.savefig(path / f"{carrier}_capacity_comparison.png", dpi=300)
     plt.show()
