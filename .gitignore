@@ -1,9 +1,8 @@
 # General
 docs/site/
-data/*
+data/network_files/*
 results/*
 results_concat/*
-figures_paper/*
 notebooks/*
 
 # Hydra
