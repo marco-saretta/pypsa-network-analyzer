@@ -19,7 +19,7 @@ def main(cfg: DictConfig) -> None:
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
             analyzer.extract_summary()
-            # analyzer.plot_all_figures()
+            analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
             logger.error(f"Failed to process {network_file}: {e}", exc_info=True)
@@ -57,9 +57,6 @@ def main(cfg: DictConfig) -> None:
         
         # Drop any excluded countries
         if cfg.exclude_countries:
-            # df_mae = df_mae.drop(columns=cfg.exclude_countries, errors="ignore")
-            # df_rmse = df_rmse.drop(columns=cfg.exclude_countries, errors="ignore")
-            # df_smape = df_smape.drop(columns=cfg.exclude_countries, errors="ignore")
             df_mae_hourly = df_mae_hourly.drop(columns=cfg.exclude_countries, errors="ignore")
             df_rmse_hourly = df_rmse_hourly.drop(columns=cfg.exclude_countries, errors="ignore")
             df_smape_hourly = df_smape_hourly.drop(columns=cfg.exclude_countries, errors="ignore")
@@ -71,9 +68,6 @@ def main(cfg: DictConfig) -> None:
             df_smape_weekly = df_smape_weekly.drop(columns=cfg.exclude_countries, errors="ignore")
 
         # Save each score type
-        # score_analyzer.save_scores(df_mae, filename="scores_mae.csv")
-        # score_analyzer.save_scores(df_rmse, filename="scores_rmse.csv")
-        # score_analyzer.save_scores(df_smape, filename="scores_smape.csv")
         score_analyzer.save_scores(df_mae_hourly, filename="scores_mae.csv")
         score_analyzer.save_scores(df_rmse_hourly, filename="scores_rmse.csv")
         score_analyzer.save_scores(df_smape_hourly, filename="scores_smape.csv")
@@ -99,10 +93,6 @@ def main(cfg: DictConfig) -> None:
         score_analyzer.save_scores(df_eu_rmse_weekly, "europe_rmse_weekly.csv")
         score_analyzer.save_scores(df_eu_smape_weekly, "europe_smape_weekly.csv")
         
-
-        # score_analyzer.save_scores(df_eu_mae, "europe_mae.csv")
-        # score_analyzer.save_scores(df_eu_rmse, "europe_rmse.csv")
-        # score_analyzer.save_scores(df_eu_smape, "europe_smape.csv")
 
         logger.info(f"Completed {group_name}\n")
 
