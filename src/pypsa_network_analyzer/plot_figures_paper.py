@@ -10,6 +10,52 @@ import seaborn as sns
 import pypsa
 import numpy as np
 
+# ---------------------------------------------------------------------------
+# Capacity-comparison constants
+# ---------------------------------------------------------------------------
+
+CAPACITY_BENCHMARK_YEAR = 2022
+CAPACITY_NETWORK_STEM   = "hindcast-dyn-rolling-wy2022"
+
+CAPACITY_PLOT_LABEL_MAPPING: dict[str, str] = {
+    "biomass":              "Biomass",
+    "lignite":              "Lignite",
+    "coal":                 "Coal",
+    "Combined-Cycle Gas":   "Combined-\nCycle Gas",
+    "oil":                  "Oil",
+    "geothermal":           "Geothermal",
+    "Pumped Hydro Storage": "Pumped \nHydro Storage",
+    "Run of River":         "Run-of-River",
+    "Reservoir & Dam":      "Reservoir &\nDam",
+    "nuclear":              "Nuclear",
+    "other":                "Other",
+    "Solar":                "Solar",
+    "Offshore Wind (AC)":   "Offshore Wind",
+    "Onshore Wind":         "Onshore Wind",
+}
+
+CAPACITY_CARRIER_ORDER: list[str] = [
+    "Solar",
+    "Onshore Wind",
+    "Offshore Wind (AC)",
+    "Combined-Cycle Gas",
+    "Open-Cycle Gas",
+    "oil",
+    "coal",
+    "lignite",
+    "nuclear",
+    "biomass",
+    "geothermal",
+    "Pumped Hydro Storage",
+    "Run of River",
+    "Reservoir & Dam",
+    "other",
+]
+
+# ENTSO-E, PyPSA  (per-country bars)
+CAPACITY_COLORS_COUNTRY = ["#56b4e9", "#fb6a4a"]
+# PyPSA, ENTSO-E  (cross-country bars)
+CAPACITY_COLORS_CARRIER = ["#6baed6", "#fb6a4a"]
 
 class ResultsPlotter:
     """Class to handle loading and plotting of simulation results."""
@@ -19,6 +65,7 @@ class ResultsPlotter:
         self.cfg = cfg
         self.root_dir = Path(cfg.paths.root)
         self.data_dir = Path(cfg.paths.data)
+        self.results_dir = Path(cfg.paths.results)
         self.results_concat_dir = Path(cfg.paths.results_concat)
         self.figures_dir = Path(cfg.paths.figures)
         self.figures_dir.mkdir(exist_ok=True)
@@ -41,6 +88,7 @@ class ResultsPlotter:
         self.load_prices()
         self.load_prices_unfiltered()
         self.load_timeseries_load_shedding()
+        self.load_capacity_data()
 
     def setup_style(self):
         plt.style.use("seaborn-v0_8-whitegrid")
@@ -253,6 +301,44 @@ class ResultsPlotter:
             series = series[series.dt.year.isin(self.cfg.years_list)]
 
             self.load_shedding_dict[sim_label] = series
+
+    def load_capacity_data(self):
+            """
+            Load ENTSO-E benchmark capacity (2022) and PyPSA capacity for
+            hindcast-dyn-rolling-wy2022 into:
+                self.entsoe_capacity_df  — (country × carrier), MW
+                self.pypsa_capacity_df   — (country × carrier), MW
+
+            Sets attributes to None and prints a warning if files are missing;
+            capacity plots are then skipped gracefully.
+            """
+            entsoe_path = (
+                self.data_dir / "benchmark"
+                / f"entsoe_installed_capacity_{CAPACITY_BENCHMARK_YEAR}.csv"
+            )
+            if entsoe_path.exists():
+                self.entsoe_capacity_df = pd.read_csv(entsoe_path, index_col=0)
+            else:
+                print(
+                    f"Warning: ENTSO-E capacity file not found — capacity plots will be skipped.\n"
+                    f"  Expected: {entsoe_path}\n"
+                    f"  Run fetch_and_save_entsoe_capacity() first."
+                )
+                self.entsoe_capacity_df = None
+
+            pypsa_path = (
+                self.results_dir / CAPACITY_NETWORK_STEM / "summary"
+                / "installed_capacity_by_country_carrier_MW.csv"
+            )
+            if pypsa_path.exists():
+                self.pypsa_capacity_df = pd.read_csv(pypsa_path, index_col=0)
+            else:
+                print(
+                    f"Warning: PyPSA capacity file not found — capacity plots will be skipped.\n"
+                    f"  Expected: {pypsa_path}\n"
+                    f"  Run NetworkAnalyzer.extract_pypsa_capacity() first."
+                )
+                self.pypsa_capacity_df = None
 
     def plot_error_by_simulation_and_year(self, error_metric, x_length=8, temporal_resolution="hourly"):
         """Create boxplot showing error metric by simulation and year for a given temporal resolution."""
@@ -857,247 +943,148 @@ class ResultsPlotter:
             plt.close()
             print(f"Saved: {output_path}")
 
-    def plot_DE_ES_plot(
+    # -----------------------------------------------------------------------
+    # Capacity comparison plots
+    # -----------------------------------------------------------------------
+
+    def plot_capacity_comparison(
         self,
-        x_length: float = 8,
-        resampling_rule: str | None = "W",
-        countries_list: list[str] = None,
-        start_date: pd.Timestamp = "2022-01-01",
-        end_date: pd.Timestamp = "2023-01-01",
-        network_file="hindcast-dyn-rolling-wy2022.nc",
-        ):
-        """Plot benchmark vs simulations per country."""
+        country: str,
+        carrier_order: list[str] | None = None,
+        ylim: tuple | None = None,
+    ) -> tuple:
+        """
+        Grouped bar chart: ENTSO-E vs PyPSA installed capacity for one country.
+        Returns ylim so it can be shared across sibling plots (e.g. DE and ES).
+        """
+        entsoe = self.entsoe_capacity_df.loc[country]
+        pypsa  = self.pypsa_capacity_df.loc[country]
 
-        if countries_list is None:
-            countries_list = ["DE", "ES"]
+        carriers = sorted(set(entsoe.index) | set(pypsa.index))
+        if carrier_order is not None:
+            carriers = [c for c in carrier_order if c in carriers] + [
+                c for c in carriers if c not in carrier_order
+            ]
 
-        plot_order = [
-            "benchmark",
-            "hindcast-std",
-            "hindcast-dyn",
-            "hindcast-dyn-rolling",
-        ]
+        comparison = pd.DataFrame(
+            {"ENTSO-E": entsoe.reindex(carriers, fill_value=0),
+             "PyPSA":   pypsa.reindex(carriers, fill_value=0)}
+        )
+        comparison = comparison[(comparison != 0).any(axis=1)] / 1000  # MW → GW
+        comparison.index = [CAPACITY_PLOT_LABEL_MAPPING.get(c, c) for c in comparison.index]
 
-        start_date = pd.Timestamp(start_date)
-        end_date = pd.Timestamp(end_date)
+        fig, ax = plt.subplots(figsize=(10, 10 / self.phi))
+        comparison.plot(kind="bar", ax=ax, color=CAPACITY_COLORS_COUNTRY, width=0.5, edgecolor="none")
 
+        ax.set_ylabel("Installed capacity (GW)")
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+        ax.grid(axis="y", linestyle=":", linewidth=0.8)
+        ax.grid(axis="x", linestyle=":", linewidth=0.8)
+        ax.set_facecolor("white")
+        fig.patch.set_facecolor("white")
+        ax.legend(title="", loc="upper right", frameon=False)
 
-        # Mapping PyPSA carriers -> standardised names
-        mapping_pypsa_carriers = {
-            "Combined-Cycle Gas": "Fossil Gas",
-            "Load shedding": None,
-            "Offshore Wind (AC)": "Wind Offshore",
-            "Offshore Wind (DC)": "Wind Offshore",
-            "Onshore Wind": "Wind Onshore",
-            "Open-Cycle Gas": "Fossil Gas",
-            "Run of River": "Hydro Run-of-river and poundage",
-            "Solar": "Solar",
-            "biomass": "Biomass",
-            "nuclear": "Nuclear",
-            "coal": "Fossil Hard coal",
-            "lignite": "Fossil Brown coal/Lignite",
-            "oil": "Fossil Oil",
-            "solar-hsat": "Solar",
-            "Pumped Hydro Storage": "Hydro Pumped Storage",
-            "Reservoir & Dam": "Hydro Water Reservoir",
-        }
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        returned_ylim = ax.get_ylim()
 
-        for country in countries_list:
-            fig, axs = plt.subplots(
-                ncols=1,
-                nrows=3,
-                figsize=(x_length, x_length * self.phi),
-                sharex=True,  # x-axis differs between bar and line plots
-            )
+        plt.tight_layout()
+        output_dir = self.figures_dir / "capacity_comparison"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_dir / f"{country}_capacity_comparison.{self.export_format}", dpi=300)
+        plt.close(fig)
+        print(f"Saved: {output_dir}/{country}_capacity_comparison.{self.export_format}")
 
-            for label in plot_order:
-                if label not in self.prices_dict:
-                    continue
-                df = self.prices_dict[label]
+        return returned_ylim
 
-                if df.index.tz is not None:
-                    _start = start_date.tz_localize("UTC") if start_date.tzinfo is None else start_date
-                    _end   = end_date.tz_localize("UTC")   if end_date.tzinfo is None   else end_date
-                else:
-                    _start = start_date.tz_localize(None) if start_date.tzinfo is not None else start_date
-                    _end   = end_date.tz_localize(None)   if end_date.tzinfo is not None   else end_date
+    def plot_capacity_all_countries_by_carrier(
+        self,
+        carrier: str,
+        country_order: list[str] | None = None,
+    ) -> None:
+        """
+        Grouped bar chart: PyPSA vs ENTSO-E installed capacity across all
+        countries for a single carrier.
+        """
+        entsoe_df = self.entsoe_capacity_df.copy().drop(index="EU", errors="ignore")
+        pypsa_df  = self.pypsa_capacity_df.copy().drop(index="EU", errors="ignore")
 
-                df = df[(_start <= df.index) & (df.index <= _end)]
-                if country not in df.columns:
-                    continue
+        if carrier not in entsoe_df.columns and carrier not in pypsa_df.columns:
+            print(f"Warning: '{carrier}' not found in either capacity dataframe — skipping.")
+            return
 
-                series = df[country]
-                if resampling_rule:
-                    series = series.resample(resampling_rule).mean()
+        all_countries = sorted(
+            set(entsoe_df.index[entsoe_df.get(carrier, pd.Series(dtype=float)) != 0])
+            | set(pypsa_df.index[pypsa_df.get(carrier, pd.Series(dtype=float)) != 0])
+        )
+        if country_order is not None:
+            all_countries = [c for c in country_order if c in all_countries] + [
+                c for c in all_countries if c not in country_order
+            ]
 
-                axs[0].plot(series.index, series, label=label, color=self.sim_color.get(label, None))
+        comparison = pd.DataFrame(
+            {
+                "PyPSA":   pypsa_df.get(carrier, pd.Series(0, index=pypsa_df.index)).reindex(all_countries, fill_value=0),
+                "ENTSO-E": entsoe_df.get(carrier, pd.Series(0, index=entsoe_df.index)).reindex(all_countries, fill_value=0),
+            },
+            index=all_countries,
+        )
+        comparison = comparison[(comparison != 0).any(axis=1)]
 
-            legend_label_map = {
-                "benchmark":            "Historical",
-                "hindcast-std":         "Hindcast-static",
-                "hindcast-dyn":         "Hindcast-dynamic",
-                "hindcast-dyn-rolling": "Hindcast-dynamic-rolling horizon",
-            }
-            desired_order = ["benchmark", "hindcast-std", "hindcast-dyn", "hindcast-dyn-rolling"]
-            handles, labels = axs[0].get_legend_handles_labels()
-            handle_map      = dict(zip(labels, handles))
-            ordered_handles = [handle_map[k] for k in desired_order if k in handle_map]
-            ordered_labels  = [legend_label_map.get(k, k) for k in desired_order if k in handle_map]
+        n = len(comparison)
+        fig, ax = plt.subplots(figsize=(max(8, n * 0.65), 5))
+        comparison.plot(kind="bar", ax=ax, color=CAPACITY_COLORS_CARRIER, width=0.5, edgecolor="none")
 
-            axs[0].legend(ordered_handles, ordered_labels, frameon=True,
-                        loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.3), fancybox=True)
-            axs[0].set_xlim(left=start_date, right=end_date)
-            axs[0].set_ylim(bottom=0, top=650)
-            axs[0].set_ylabel("EUR/MWh")
-            axs[0].grid(True, linestyle="dashed", alpha=0.5)
+        ax.set_ylabel("Installed capacity (MW)")
+        ax.set_xlabel("")
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+        ax.grid(axis="y", linestyle=":", linewidth=0.8)
+        ax.grid(axis="x", linestyle=":", linewidth=0.8)
+        ax.set_facecolor("white")
+        fig.patch.set_facecolor("white")
+        ax.legend(title="", loc="upper right", frameon=False)
 
-            # Middle plot
-            n = pypsa.Network(self.data_dir / "network_files" / network_file)
+        plt.tight_layout()
+        output_dir = self.figures_dir / "capacity_comparison"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_carrier = carrier.replace("/", "-").replace(" ", "_")
+        plt.savefig(output_dir / f"{safe_carrier}_capacity_comparison.{self.export_format}", dpi=300)
+        plt.close(fig)
+        print(f"Saved: {output_dir}/{safe_carrier}_capacity_comparison.{self.export_format}")
 
-            supply_stats = n.statistics.supply(groupby=["bus", "carrier"], groupby_time=False) / 1000
-            country_supply = supply_stats.xs(country, level="bus")
-            country_generators_and_storage = country_supply.loc[["Generator", "StorageUnit"], :]
-            country_dispatch_raw = country_generators_and_storage.T.droplevel(0, axis=1)
+    def plot_all_capacity_comparisons(self) -> None:
+        """
+        Generate the full set of capacity comparison figures.
+        Skips gracefully if either capacity CSV was not found at load time.
+        """
+        if self.entsoe_capacity_df is None or self.pypsa_capacity_df is None:
+            print("Skipping capacity comparison plots — one or both data files missing.")
+            return
 
-            ignored_carriers = [col for col, target in mapping_pypsa_carriers.items()
-                                if target is None and col in country_dispatch_raw.columns]
-            country_dispatch_raw = country_dispatch_raw.drop(columns=ignored_carriers)
+        print("\n--- Generating capacity comparison plots ---")
 
-            carrier_rename = {col: target for col, target in mapping_pypsa_carriers.items()
-                            if target is not None and col in country_dispatch_raw.columns}
-            country_dispatch = country_dispatch_raw.rename(columns=carrier_rename)
-            country_dispatch = country_dispatch.T.groupby(level=0).sum().T  # merge duplicate cols
+        # Per-country: DE and ES share a y-axis, others are independent
+        ylim = self.plot_capacity_comparison("DE", carrier_order=CAPACITY_CARRIER_ORDER)
+        self.plot_capacity_comparison("ES", carrier_order=CAPACITY_CARRIER_ORDER, ylim=ylim)
+        for country in ["NO", "FR", "IT", "DK", "EU"]:
+            self.plot_capacity_comparison(country, carrier_order=CAPACITY_CARRIER_ORDER)
 
-            if resampling_rule:
-                country_dispatch_res = country_dispatch.resample(resampling_rule).sum()
-            else:
-                country_dispatch_res = country_dispatch
-
-            country_dispatch_res.plot.bar(stacked=True, width=1.0, ax=axs[1])
-            axs[1].set_ylabel(f"PyPSA dispatch resampled {resampling_rule} [GWh]")
-            axs[1].grid(False)
-            axs[1].yaxis.grid(True, linestyle='-', linewidth=0.8)
-            axs[1].xaxis.grid(False)
-
-            # Bottom plot
-
-            entsoe_raw = pd.read_csv(
-                self.data_dir / "generation" / f"generation_{country}_hourly_data.csv",
-                index_col=0,
-                parse_dates=True,
-            )
-
-            # Timezone alignment
-            if entsoe_raw.index.tz is not None:
-                _start = start_date.tz_localize("UTC") if start_date.tzinfo is None else start_date
-                _end   = end_date.tz_localize("UTC")   if end_date.tzinfo is None   else end_date
-            else:
-                _start = start_date.tz_localize(None) if start_date.tzinfo is not None else start_date
-                _end   = end_date.tz_localize(None)   if end_date.tzinfo is not None   else end_date
-
-            entsoe_filtered = entsoe_raw[(_start <= entsoe_raw.index) & (entsoe_raw.index <= _end)]
-
-            # Parse tuple-like column names -> keep only 'Actual Aggregated', except Pumped Hydro
-            def parse_entsoe_col(col_str):
-                """Return (carrier, aggregation_type) from a string like \"('Fossil Gas', 'Actual Aggregated')\"."""
-                col_str = col_str.strip().strip("'\"() ")
-                parts   = [p.strip().strip("'\" ") for p in col_str.split(",", 1)]
-                return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
-
-            # Build clean ENTSO-E dataframe with standardised carrier columns
-            entsoe_carriers = {}  # carrier_name -> list of series to sum
-
-            for col in entsoe_filtered.columns:
-                carrier, agg_type = parse_entsoe_col(col)
-
-                if carrier == "Hydro Pumped Storage":
-                    # Keep charge and discharge separated
-                    if "Aggregated" in agg_type:
-                        label_col = "Hydro Pumped Storage (generation)"
-                    elif "Consumption" in agg_type:
-                        label_col = "Hydro Pumped Storage (consumption)"
-                    else:
-                        continue
-                else:
-                    # For all other carriers keep only Actual Aggregated
-                    if "Aggregated" not in agg_type:
-                        continue
-                    label_col = carrier  # use the standardised ENTSO-E carrier name directly
-
-                entsoe_carriers.setdefault(label_col, []).append(entsoe_filtered[col])
-
-            entsoe_dispatch = pd.DataFrame(
-                {col: pd.concat(series_list, axis=1).sum(axis=1)
-                for col, series_list in entsoe_carriers.items()}
-            )
-
-            # Convert MW -> GWh (hourly data: MWh per hour / 1000)
-            entsoe_dispatch = entsoe_dispatch / 1000
-
-            if resampling_rule:
-                entsoe_dispatch_res = entsoe_dispatch.resample(resampling_rule).sum()
-            else:
-                entsoe_dispatch_res = entsoe_dispatch
-
-            # Align columns: map ENTSO-E standard names -> PyPSA standard names for comparison
-            # (Pumped Hydro generation maps to the same carrier; consumption kept separate)
-            entsoe_to_pypsa_name = {
-                "Biomass":                              "Biomass",
-                "Fossil Brown coal/Lignite":            "Fossil Brown coal/Lignite",
-                "Fossil Coal-derived gas":              "Fossil Hard coal",
-                "Fossil Gas":                           "Fossil Gas",
-                "Fossil Hard coal":                     "Fossil Hard coal",
-                "Fossil Oil":                           "Fossil Oil",
-                "Fossil Oil shale":                     "Fossil Oil",
-                "Fossil Peat":                          "Fossil Hard coal",
-                "Geothermal":                           "Geothermal",
-                "Hydro Pumped Storage (generation)":    "Hydro Pumped Storage",
-                "Hydro Pumped Storage (consumption)":   "Hydro Pumped Storage (consumption)",
-                "Hydro Run-of-river and poundage":      "Hydro Run-of-river and poundage",
-                "Hydro Water Reservoir":                "Hydro Water Reservoir",
-                "Nuclear":                              "Nuclear",
-                "Other":                                "Other",
-                "Other renewable":                      "Other",
-                "Solar":                                "Solar",
-                "Waste":                                "Biomass",
-                "Wind Offshore":                        "Wind Offshore",
-                "Wind Onshore":                         "Wind Onshore",
-            }
-
-            entsoe_dispatch_renamed = entsoe_dispatch_res.rename(columns=entsoe_to_pypsa_name)
-            entsoe_dispatch_renamed = entsoe_dispatch_renamed.T.groupby(level=0).sum().T  # merge duplicates
-
-            # Align both dataframes to the same columns and index
-            common_carriers = country_dispatch_res.columns.intersection(entsoe_dispatch_renamed.columns)
-            pypsa_aligned   = country_dispatch_res[common_carriers].reindex(entsoe_dispatch_renamed.index)
-            entsoe_aligned  = entsoe_dispatch_renamed[common_carriers]
-
-            dispatch_diff = entsoe_aligned - pypsa_aligned  # ENTSO-E minus PyPSA
-
-            # Plot diff with same monthly tick logic
-            dispatch_diff.plot.bar(stacked=True, width=1.0, ax=axs[2], legend=True)
-
-            monthly_ticks_bottom = {}
-            for i, ts in enumerate(dispatch_diff.index):
-                month_key = (ts.year, ts.month)
-                if month_key not in monthly_ticks_bottom:
-                    monthly_ticks_bottom[month_key] = (i, ts.strftime("%b"))
-
-            tick_positions_bottom = [pos for pos, _ in monthly_ticks_bottom.values()]
-            tick_labels_bottom    = [lbl for _, lbl in monthly_ticks_bottom.values()]
-
-            #axs[2].set_xticks(tick_positions_bottom)
-            #axs[2].set_xticklabels(tick_labels_bottom, rotation=45, ha="right", fontsize=8)
-            #axs[2].axhline(0, color="black", linewidth=0.8)
-            #axs[2].set_ylabel("ENTSO-E − PyPSA [GWh]")
-            #axs[2].set_xlabel("Date")
-            #axs[2].grid(False)
-            #axs[2].yaxis.grid(True, linestyle="-", linewidth=0.8)
-
-            plt.tight_layout()
-            output_path = self.figures_dir / f"that_plot_{country}.{self.export_format}"
-            plt.savefig(output_path)
-            plt.close(fig)
+        # Cross-country per carrier
+        for carrier in [
+            "Combined-Cycle Gas",
+            "oil",
+            "lignite",
+            "coal",
+            "nuclear",
+            "biomass",
+            "Solar",
+            "Offshore Wind (AC)",
+            "Onshore Wind",
+            "Pumped Hydro Storage",
+            "Run of River",
+            "Reservoir & Dam",
+        ]:
+            self.plot_capacity_all_countries_by_carrier(carrier)
 
     def generate_all_plots(self):
         """Generate all plots."""
@@ -1120,6 +1107,7 @@ class ResultsPlotter:
         # Price plots (not temporal-resolution-specific)
         self.plot_prices()
         self.plot_europe_prices()
+        self.plot_all_capacity_comparisons()
 
         print("\nAll plots generated successfully!")
 
