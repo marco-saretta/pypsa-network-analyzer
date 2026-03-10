@@ -7,18 +7,28 @@ import gc
 from pypsa_network_analyzer.network_analyzer import NetworkAnalyzer
 from pypsa_network_analyzer.score_analyzer import ScoreAnalyzer
 from pypsa_network_analyzer.utils import setup_logger, merge_dataframes
+from pypsa_network_analyzer.entsoe_retrieval import fetch_and_save_entsoe_capacity
 
+years_list = [2020, 2021, 2022, 2023, 2024]
 
 @hydra.main(version_base=None, config_path="configs", config_name="default_config")
 def main(cfg: DictConfig) -> None:
     logger = setup_logger(log_dir=cfg.paths.log)
     logger.info("Starting PyPSA Network Analysis")
 
+    # Fetch ENTSO-E installed capacities for each benchmark year
+    fetch_and_save_entsoe_capacity(
+        cfg=cfg,
+        years_list=cfg.years_list,          # e.g. [2019, 2020, 2021, 2022]
+        logger=logger,
+    )
+
     # Process network files
     for network_file in tqdm(cfg.network_files, desc="Processing networks"):
         try:
             analyzer = NetworkAnalyzer(config=cfg, network_file=network_file, logger=logger)
             analyzer.extract_summary()
+            analyzer.extract_pypsa_capacity()
             analyzer.plot_all_figures()
             gc.collect()
         except Exception as e:
