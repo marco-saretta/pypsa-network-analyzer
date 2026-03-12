@@ -9,6 +9,7 @@ import matplotlib as mpl
 import seaborn as sns
 import pypsa
 import numpy as np
+import re
 
 # ---------------------------------------------------------------------------
 # Capacity-comparison constants
@@ -1086,6 +1087,487 @@ class ResultsPlotter:
         ]:
             self.plot_capacity_all_countries_by_carrier(carrier)
 
+
+
+    def plot_price_dispatch_compare(self):
+        data_dir = self.data_dir
+        figure_dir = self.figures_dir
+
+        # This script applies mapping twice. First to PyPSA carriers and later to ENTSO-E data. This gives the common names.
+        # This is the "nice names"
+        mapping_pypsa_carriers = {
+            "Combined-Cycle Gas": "Gas",
+            "Load shedding": None,
+            "Offshore Wind (AC)": "Wind Offshore",
+            "Offshore Wind (DC)": "Wind Offshore",
+            "Onshore Wind": "Wind Onshore",
+            "Open-Cycle Gas": "Gas",
+            "Run of River": "Run-of-river",
+            "Solar": "Solar",
+            "biomass": "Biomass",
+            "nuclear": "Nuclear",
+            "coal": "Coal",
+            "lignite": "Lignite",
+            "oil": "Oil",
+            "solar-hsat": "Solar",
+            "Pumped Hydro Storage": "Pumped Hydro Storage",
+            "Reservoir & Dam": "Reservoir & Dam",
+            "geothermal": "Geothermal"
+        }
+
+        start_date = (pd.Timestamp("2022-01-01"),)
+        end_date = (pd.Timestamp("2022-12-31 23:00"),)
+
+
+        countries_include = ["DE","ES"]
+
+        resampling_rule = "W-MON"  # Weekly, starting on Monday
+
+        x_length = 6
+
+        phi = 1.618
+
+
+        n = pypsa.Network(data_dir / "network_files" / "hindcast-dyn-rolling-wy2022.nc")
+
+        # Color mapping for plotting
+
+        color_dict = n.carriers["color"].to_dict()
+
+        mapping_color = {
+            "offwind-ac": "Wind Offshore",
+            "offwind-dc": "Wind Offshore",
+            "onwind": "Wind Onshore",
+            "solar": "Solar",
+            "solar-hsat": "Solar",
+            "CCGT": "Gas",
+            "OCGT": "Gas",
+            "PHS": "Pumped Hydro Storage",
+            "biomass": "Biomass",
+            "coal": "Coal",
+            "geothermal": "Geothermal",
+            "hydro": "Reservoir & Dam",
+            "lignite": "Lignite",
+            "nuclear": "Nuclear",
+            "oil": "Oil",
+            "ror": "Run-of-river",
+        }
+
+        color_dict_new = {}
+
+        for original_name, new_name in mapping_color.items():
+            # Use the color from the original carrier
+            if original_name in color_dict:
+                color_dict_new[new_name] = color_dict[original_name]
+
+
+        color_dict_new['Other'] = 'tab:red'
+
+        for country in countries_include:
+            supply_stats = n.statistics.supply(groupby=["bus", "carrier"], groupby_time=False) / 1000
+            country_supply = supply_stats.xs(country, level="bus")
+            country_generators_and_storage = country_supply.loc[["Generator", "StorageUnit"], :]
+            country_dispatch_raw = country_generators_and_storage.T.droplevel(0, axis=1)
+
+            ignored_carriers = [
+                col for col, target in mapping_pypsa_carriers.items() if target is None and col in country_dispatch_raw.columns
+            ]
+            country_dispatch_raw = country_dispatch_raw.drop(columns=ignored_carriers)
+
+            carrier_rename = {
+                col: target
+                for col, target in mapping_pypsa_carriers.items()
+                if target is not None and col in country_dispatch_raw.columns
+            }
+            country_dispatch = country_dispatch_raw.rename(columns=carrier_rename)
+            country_dispatch = country_dispatch.T.groupby(level=0).sum().T  # merg
+
+
+            if resampling_rule:
+                country_dispatch_res = country_dispatch.resample(resampling_rule).sum()
+            else:
+                country_dispatch_res = country_dispatch
+
+            withdrawal_stats = n.statistics.withdrawal(groupby=["bus", "carrier"], groupby_time=False) / 1000 # Converted to GWh
+            country_withdrawal = withdrawal_stats.xs(country, level="bus")
+            country_generators_and_storage = country_withdrawal.loc[["Generator", "StorageUnit"], :]
+            country_consumption_raw = country_generators_and_storage.T.droplevel(0, axis=1)
+
+            carrier_rename = {
+                col: target
+                for col, target in mapping_pypsa_carriers.items()
+                if target is not None and col in country_consumption_raw.columns
+            }
+            country_consumption = country_consumption_raw.rename(columns=carrier_rename)
+            country_consumption = country_consumption.T.groupby(level=0).sum().T  # merg
+
+
+            keek_withdrawal = ["Pumped Hydro Storage"]
+            # Drop all other columns except the ones in keek_withdrawal
+            country_consumption_clean = country_consumption[keek_withdrawal]
+            country_consumption_clean
+
+
+            if resampling_rule:
+                country_consumption_res = country_consumption_clean.resample(resampling_rule).sum()
+            else:
+                country_consumption_res = country_consumption_clean
+
+
+            # Entso-e data
+            entsoe_raw = pd.read_csv(
+            data_dir / "generation" / f"generation_{country}_hourly_data.csv",
+            index_col=0,
+            parse_dates=True,
+            )
+
+            entsoe_filtered_raw = entsoe_raw[pd.Timestamp(start_date[0], tz="UTC") : pd.Timestamp(end_date[0], tz="UTC")]
+
+            #Mapping depend on entso-e reporting
+            if "Actual Aggregated" in str(entsoe_filtered_raw.columns):
+                print("agg")
+                keep_cols = [
+                    "('Biomass', 'Actual Aggregated')",
+                    "('Fossil Brown coal/Lignite', 'Actual Aggregated')",
+                    "('Fossil Coal-derived gas', 'Actual Aggregated')",
+                    "('Fossil Gas', 'Actual Aggregated')",
+                    "('Fossil Hard coal', 'Actual Aggregated')",
+                    "('Fossil Oil', 'Actual Aggregated')",
+                    "('Geothermal', 'Actual Aggregated')",
+                    "('Hydro Pumped Storage', 'Actual Aggregated')",
+                    #"('Hydro Pumped Storage', 'Actual Consumption')",
+                    "('Hydro Run-of-river and poundage', 'Actual Aggregated')",
+                    "('Hydro Water Reservoir', 'Actual Aggregated')",
+                    "('Nuclear', 'Actual Aggregated')",
+                    "('Other', 'Actual Aggregated')",
+                    "('Other renewable', 'Actual Aggregated')",
+                    "('Solar', 'Actual Aggregated')",
+                    "('Waste', 'Actual Aggregated')",
+                    "('Wind Offshore', 'Actual Aggregated')",
+                    "('Wind Onshore', 'Actual Aggregated')",
+                ]
+                
+
+
+                keep_cols_existing = [c for c in keep_cols if c in entsoe_filtered_raw.columns]
+
+                other_cols = [c for c in entsoe_filtered_raw.columns if "(" not in c]
+
+                final_cols = list(set(keep_cols_existing + other_cols))
+
+                entsoe_filtered = entsoe_filtered_raw[final_cols].copy()
+                entsoe_filtered = entsoe_filtered.drop(columns=["Energy storage"], errors="ignore")
+            
+
+                mapping_entsoe_pypsa = {
+                    "('Biomass', 'Actual Aggregated')": "Biomass",
+                    "('Fossil Brown coal/Lignite', 'Actual Aggregated')": "Lignite",
+                    "('Fossil Coal-derived gas', 'Actual Aggregated')": "Gas",
+                    "('Fossil Gas', 'Actual Aggregated')": "Gas",
+                    "('Fossil Hard coal', 'Actual Aggregated')": "Coal",
+                    "('Fossil Oil', 'Actual Aggregated')": "Oil",
+                    "('Geothermal', 'Actual Aggregated')": "Geothermal",
+                    "('Hydro Pumped Storage', 'Actual Aggregated')": "Pumped Hydro Storage",
+                    #"('Hydro Pumped Storage', 'Actual Consumption')": ,
+                    "('Hydro Run-of-river and poundage', 'Actual Aggregated')": "Run-of-river",
+                    "('Hydro Water Reservoir', 'Actual Aggregated')": "Reservoir & Dam",
+                    "('Nuclear', 'Actual Aggregated')": "Nuclear",
+                    "('Other', 'Actual Aggregated')": "Other",
+                    "('Other renewable', 'Actual Aggregated')": "Other",
+                    "('Solar', 'Actual Aggregated')": "Solar",
+                    "('Waste', 'Actual Aggregated')": "Biomass",
+                    "('Wind Offshore', 'Actual Aggregated')": "Wind Offshore",
+                    "('Wind Onshore', 'Actual Aggregated')": "Wind Onshore",
+                }
+
+                entsoe_clean = (entsoe_filtered.rename(columns=mapping_entsoe_pypsa) /1000).copy() # convert to GWh
+                entsoe_clean = entsoe_clean.T.groupby(level=0).sum().T
+
+
+            else:
+                print("else")
+                mapping_entsoe_pypsa = {
+                "Biomass": "Biomass",
+                "Fossil Brown coal/Lignite": "Lignite",
+                "Fossil Coal-derived gas": "Gas",
+                "Fossil Gas": "Gas",
+                "Fossil Hard coal": "Coal",
+                "Fossil Oil": "Oil",
+                "Fossil Oil shale": "Oil",
+                "Fossil Peat": "Lignite",
+                "Geothermal": "Geothermal",
+                "Hydro Pumped Storage Net": "Pumped Hydro Storage",
+                "Hydro Run-of-river and poundage": "Run-of-river",
+                "Hydro Water Reservoir": "Reservoir & Dam",
+                "Marine": "Other",
+                "Nuclear": "Nuclear",
+                "Other": "Other",
+                "Other renewable": "Other",
+                "Solar": "Solar",
+                "Waste": "Biomass",
+                "Wind Offshore": "Wind Offshore",
+                "Wind Onshore": "Wind Onshore",
+            }
+
+                
+                entsoe_filtered = entsoe_filtered_raw.rename(columns=mapping_entsoe_pypsa) 
+                entsoe_filtered = entsoe_filtered.drop(columns=["Energy storage"], errors="ignore")
+                entsoe_clean = (entsoe_filtered.T.groupby(level=0).sum().T)/1000 # convert to GWh
+                
+
+            #Additional mapping required for contries that report in mixed formes
+            mapping_entsoe_pypsa = {
+                "Biomass": "Biomass",
+                "Fossil Brown coal/Lignite": "Lignite",
+                "Fossil Coal-derived gas": "Gas",
+                "Fossil Gas": "Gas",
+                "Fossil Hard coal": "Coal",
+                "Fossil Oil": "Oil",
+                "Fossil Oil shale": "Oil",
+                "Fossil Peat": "Lignite",
+                "Geothermal": "Geothermal",
+                "Hydro Pumped Storage Net": "Pumped Hydro Storage",
+                "Hydro Pumped Storage": "Pumped Hydro Storage",
+                "Hydro Run-of-river and poundage": "Run-of-river",
+                "Hydro Water Reservoir": "Reservoir & Dam",
+                "Marine": "Other",
+                "Nuclear": "Nuclear",
+                "Other": "Other",
+                "Other renewable": "Other",
+                "Solar": "Solar",
+                "Waste": "Biomass",
+                "Wind Offshore": "Wind Offshore",
+                "Wind Onshore": "Wind Onshore",
+                }
+
+            mapping_existing = {k: v for k, v in mapping_entsoe_pypsa.items() if k in entsoe_clean.columns}
+
+            entsoe_filtered_v2 = entsoe_clean.rename(columns=mapping_existing).copy()
+            entsoe_clean = entsoe_filtered_v2.T.groupby(level=0).sum().T.copy()
+
+
+            # Test how ENTSO-E reports 
+            agg_col = "('Hydro Pumped Storage', 'Actual Aggregated')"
+            cons_col = "('Hydro Pumped Storage', 'Actual Consumption')"
+            net_col = "Hydro Pumped Storage Net"
+            base_col = "Hydro Pumped Storage"
+
+            if agg_col in entsoe_filtered_raw.columns and cons_col in entsoe_filtered_raw.columns and entsoe_filtered_raw["('Hydro Pumped Storage', 'Actual Aggregated')"].sum()>0:
+                print("agg")
+                # Calculate the net dispatch for Pumped Hydro Storage
+                #country_dispatch_res["Pumped Hydro Storage"] = country_dispatch_res["Pumped Hydro Storage"] - country_consumption_res["Pumped Hydro Storage"]
+                # Clip all negative values to zero (since we are only interested in the dispatch, not the consumption)
+                #country_dispatch_res["Pumped Hydro Storage"] = country_dispatch_res["Pumped Hydro Storage"].clip(lower=0)
+                country_dispatch["Pumped Hydro Storage"] = country_dispatch["Pumped Hydro Storage"].clip(lower=0)
+                entsoe_clean["Pumped Hydro Storage"]=entsoe_clean["Pumped Hydro Storage"].clip(lower=0)
+            elif net_col in entsoe_filtered_raw.columns:
+                # Calculate the net dispatch for Pumped Hydro Storage
+                #country_dispatch_res["Pumped Hydro Storage"] = country_dispatch_res["Pumped Hydro Storage"] - country_consumption_res["Pumped Hydro Storage"]
+                country_dispatch["Pumped Hydro Storage"] = country_dispatch["Pumped Hydro Storage"] - country_consumption["Pumped Hydro Storage"]
+                # Clip all negative values to zero (since we are only interested in the dispatch, not the consumption)
+                country_dispatch["Pumped Hydro Storage"] = country_dispatch["Pumped Hydro Storage"].clip(lower=0)
+                entsoe_clean["Pumped Hydro Storage"]=entsoe_clean["Pumped Hydro Storage"].clip(lower=0)
+                print("net")
+            elif base_col in entsoe_filtered_raw.columns:
+                print("base")
+                # Calculate the net dispatch for Pumped Hydro Storage
+                #country_dispatch_res["Pumped Hydro Storage"] = country_dispatch_res["Pumped Hydro Storage"] - country_consumption_res["Pumped Hydro Storage"]
+                # Clip all negative values to zero (since we are only interested in the dispatch, not the consumption)
+                #country_dispatch_res["Pumped Hydro Storage"] = country_dispatch_res["Pumped Hydro Storage"].clip(lower=0)
+                country_dispatch["Pumped Hydro Storage"] = country_dispatch["Pumped Hydro Storage"].clip(lower=0)
+                entsoe_clean["Pumped Hydro Storage"]=entsoe_clean["Pumped Hydro Storage"].clip(lower=0)
+
+            entsoe_clean = entsoe_clean.tz_localize(None)
+
+            unique_cols = list(dict.fromkeys(entsoe_clean.columns.tolist()))
+            clean_data = {col: entsoe_clean[[col]].sum(axis=1) for col in unique_cols}
+            entsoe_dedup = pd.DataFrame(clean_data, index=entsoe_clean.index)
+
+            diff = entsoe_dedup.copy()
+            for col in diff.columns:
+                if col in country_dispatch.columns:
+                    diff[col] = entsoe_dedup[col] - country_dispatch[col]
+                # else: leave as entsoe value untouched
+
+            diff_res = diff.resample(resampling_rule).sum()
+
+
+            # Get prices
+
+            prices_dict = {}
+
+
+            sim_labels = {'hindcast-std',
+                        'hindcast-dyn',
+                        'hindcast-dyn-rolling'}
+            # Load simulation
+            for sim_label in sim_labels:
+                #file_dir = Path('../results_concat') / sim_label / 'electricity_prices' / "combined_electricity_prices.csv"
+                file_dir = self.results_concat_dir / sim_label / 'electricity_prices' / "combined_electricity_prices.csv"
+
+                df_sim = pd.read_csv(file_dir, index_col=0, parse_dates=True)
+                df_sim = df_sim[df_sim.index.year.isin([2022])]
+
+                prices_dict[sim_label] = df_sim
+
+            # Load benchmark
+            benchmark_path = data_dir / "benchmark" / "electricity_prices.csv"
+            df_bench = pd.read_csv(benchmark_path, index_col=0, parse_dates=True)
+
+            if df_bench.index.tz is None:
+                df_bench.index = df_bench.index.tz_localize("UTC")
+            else:
+                df_bench.index = df_bench.index.tz_convert("UTC")
+
+            df_bench = df_bench.interpolate().ffill().bfill()
+
+            df_bench = df_bench[df_bench.index.year.isin([2022])]
+
+            prices_dict["benchmark"] = df_bench
+            
+            #Plot
+
+          
+            # ── Figure ─────────────────────────────────────────────────────────────────────
+            phi = 1.618
+            fig, axs = plt.subplots(
+                ncols=1,
+                nrows=3,
+                figsize=(x_length, x_length * phi * 0.8),
+                sharex=False,
+            )
+
+            # ── Global style (mirrors setup_style) ────────────────────────────────────────
+            plt.style.use("seaborn-v0_8-whitegrid")
+            mpl.rcParams["axes.spines.right"]   = False
+            mpl.rcParams["axes.spines.top"]     = False
+            plt.rcParams["font.family"]         = "Arial"
+            plt.rcParams["axes.titleweight"]    = "bold"
+            plt.rcParams["axes.labelsize"]      = 16
+            plt.rcParams["xtick.labelsize"]     = 16
+            plt.rcParams["ytick.labelsize"]     = 16
+            plt.rcParams["legend.fontsize"]     = 16
+            plt.rcParams["legend.title_fontsize"] = 16
+
+            # ── ax[0] : Prices ─────────────────────────────────────────────────────────────
+            plot_order = [
+                "benchmark",
+                "hindcast-std",
+                "hindcast-dyn",
+                "hindcast-dyn-rolling",
+            ]
+
+            sim_color = {
+                "benchmark":            "#56b4e9",
+                "hindcast-dyn":         "#009e73",
+                "hindcast-dyn-rolling": "#d55e00",
+                "hindcast-std":         "#e69f00",
+            }
+
+            for label in plot_order:
+                if label not in prices_dict:
+                    continue
+                df = prices_dict[label]
+                if country not in df.columns:
+                    continue
+                series = df[country]
+                if resampling_rule:
+                    series = series.resample("D").mean()
+                axs[0].plot(series, label=label, color=sim_color.get(label, None))
+
+            axs[0].set_xlim(left=start_date, right=end_date)
+            axs[0].set_ylim(bottom=0, top=720)
+            axs[0].set_ylabel("Prices [EUR/MWh]")
+            axs[0].yaxis.grid(True, linestyle="dashed", linewidth=0.5, alpha=0.4, zorder=0)
+            axs[0].xaxis.grid(False)
+            axs[0].set_axisbelow(True)
+            axs[0].set_xticks([])
+            axs[0].tick_params(axis="y", which="both", left=False)
+
+            # ── ax[1] : Dispatch ───────────────────────────────────────────────────────────
+            carrier_order = [
+                "Lignite",
+                "Nuclear",
+                "Coal",
+                "Gas",
+                "Oil",
+                "Biomass",
+                "Reservoir & Dam",
+                "Pumped Hydro Storage",
+                "Run-of-river",
+                "Wind Offshore",
+                "Wind Onshore",
+                "Solar",
+            ]
+
+            def reorder_columns(df, order):
+                existing  = [c for c in order if c in df.columns]
+                remaining = [c for c in df.columns if c not in existing]
+                return df[existing + remaining]
+
+            country_dispatch_res_twh = reorder_columns(country_dispatch_res, carrier_order) / 1000
+            country_dispatch_res_twh.plot.bar(
+                stacked=True, width=1.0, ax=axs[1], legend=False,
+                color=color_dict_new,
+            )
+            axs[1].set_ylabel("Weekly dispatch\n[TWh]")
+            axs[1].set_xlabel("")
+            axs[1].yaxis.grid(True, linestyle="dashed", linewidth=0.5, alpha=0.4, zorder=0)
+            axs[1].xaxis.grid(False)
+            axs[1].set_axisbelow(True)
+            axs[1].set_xticks([])
+            axs[1].yaxis.set_major_locator(mpl.ticker.MultipleLocator(2))
+            axs[1].yaxis.set_minor_locator(mpl.ticker.MultipleLocator(1))
+            axs[1].tick_params(axis="y", which="both", left=False)
+
+            # ── ax[2] : Dispatch difference ────────────────────────────────────────────────
+            diff_res_plot = diff_res.copy() / 1000 # Convert to TWh
+            diff_timestamps = diff_res_plot.index
+            diff_res_plot = diff_res_plot.reset_index(drop=True)
+
+            diff_res_plot.plot.bar(
+                stacked=True, width=1.0, ax=axs[2], legend=False,
+                color=color_dict_new,
+            )
+            axs[2].set_xlabel("")
+            axs[2].set_ylabel("Weekly dispatch\ndifference [TWh]")
+            axs[2].yaxis.grid(True, linestyle="dashed", linewidth=0.5, alpha=0.4, zorder=0)
+            axs[2].xaxis.grid(False)
+            axs[2].set_axisbelow(True)
+            axs[2].set_ylim(bottom=-6, top=6)
+            axs[2].yaxis.set_major_locator(mpl.ticker.MultipleLocator(2))
+            axs[2].yaxis.set_minor_locator(mpl.ticker.MultipleLocator(1))
+            axs[2].tick_params(axis="y", which="both", left=False)
+            axs[2].axhline(0, color="black", linewidth=0.6, zorder=3)
+
+            # Monthly ticks
+            tick_positions = []
+            tick_labels    = []
+            prev_month     = None
+            for i, ts in enumerate(diff_timestamps):
+                if ts.month != prev_month:
+                    tick_positions.append(i)
+                    tick_labels.append(
+                        ts.strftime("%b %Y") if (ts.month == 1 or prev_month is None)
+                        else ts.strftime("%b")
+                    )
+                    prev_month = ts.month
+            axs[2].set_xticks(tick_positions)
+            axs[2].set_xticklabels(tick_labels, rotation=45, ha="right")
+            axs[2].tick_params(axis="x", length=3)
+
+            # ── Shared spine cleanup ────────────────────────────────────────────────────────
+            for ax in axs:
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+
+
+            plt.tight_layout()
+            # Save the figure
+            file_path = figure_dir / f"price_dispatch_comparison_{country}.pdf"
+            plt.savefig(file_path, bbox_inches="tight")
+        
+
     def generate_all_plots(self):
         """Generate all plots."""
         print("Generating plots...")
@@ -1108,6 +1590,7 @@ class ResultsPlotter:
         self.plot_prices()
         self.plot_europe_prices()
         self.plot_all_capacity_comparisons()
+        self.plot_price_dispatch_compare()
 
         print("\nAll plots generated successfully!")
 
