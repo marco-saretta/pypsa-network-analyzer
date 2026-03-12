@@ -55,7 +55,7 @@ years_list:
 - 2023
 - 2024
 
-api_key: YOUR-ENTSOE-API-KEY
+entsoe_api_key: 'YOUR-API-KEY-HERE'  # Replace with your actual ENTSO-E API key
 
 # Per-simulation config
 plot_export_format: "pdf"

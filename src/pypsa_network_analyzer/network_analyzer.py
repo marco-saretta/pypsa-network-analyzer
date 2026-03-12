@@ -427,6 +427,59 @@ class NetworkAnalyzer:
         energy_mix_df = energy_mix_df / 1e6  # Convert to TWh
         energy_mix_df.to_csv(folder / "energy_mix_by_bus_TWh.csv")
 
+
+    def extract_pypsa_capacity(self) -> None:
+        """
+        Extract installed generation capacity from the PyPSA network, grouped by
+        country and carrier, and save the result as a CSV in the summary folder.
+
+        Output
+        ------
+        results/<network_stem>/summary/installed_capacity_by_country_carrier_MW.csv
+
+            Rows    : country codes  (+ "EU" aggregate row)
+            Columns : PyPSA carrier names
+            Values  : installed capacity in MW
+        """
+        folder = self.network_file_res_dir / "summary"
+        folder.mkdir(parents=True, exist_ok=True)
+
+        # ------------------------------------------------------------------
+        # 1) Use PyPSA's built-in statistics to get capacity by
+        #    (country, carrier).  The "country" level is derived from the bus
+        #    country attribute that PyPSA-Eur sets automatically.
+        # ------------------------------------------------------------------
+        cap_series = self.n.statistics.installed_capacity(
+            groupby=["country", "carrier"]
+        )
+
+        # statistics() returns a MultiIndex Series → group & sum just in case
+        cap_country_carrier = cap_series.groupby(["country", "carrier"]).sum()
+
+        # ------------------------------------------------------------------
+        # 2) Pivot to (country × carrier) matrix
+        # ------------------------------------------------------------------
+        df = cap_country_carrier.unstack("carrier").fillna(0)
+
+        # Drop non-generation columns that may appear
+        _drop = ["AC", "DC", "Load shedding"]
+        df = df.drop(columns=[c for c in _drop if c in df.columns], errors="ignore")
+
+        # ------------------------------------------------------------------
+        # 3) EU aggregate row
+        # ------------------------------------------------------------------
+        df.loc["EU"] = df.sum()
+
+        # ------------------------------------------------------------------
+        # 4) Save
+        # ------------------------------------------------------------------
+        out_path = folder / "installed_capacity_by_country_carrier_MW.csv"
+        df.to_csv(out_path)
+        self.logger.info(f"PyPSA installed capacity saved: {out_path}")
+
+        # Keep a reference for potential downstream use in the same run
+        self.capacity_by_country_carrier = df
+
     def plot_installed_capacity(self, bus):
         """
         Plot installed capacities per bus as a horizontal bar chart.
