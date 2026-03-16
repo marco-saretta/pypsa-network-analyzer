@@ -1119,7 +1119,9 @@ class ResultsPlotter:
         end_date = (pd.Timestamp("2022-12-31 23:00"),)
 
 
-        countries_include = ["DE","ES"]
+        #countries_include = ["DE","ES"]
+        countries_include = ["DK","NO","FR","IT","DE","ES"]
+
 
         resampling_rule = "W-MON"  # Weekly, starting on Monday
 
@@ -1166,7 +1168,9 @@ class ResultsPlotter:
         for country in countries_include:
             supply_stats = n.statistics.supply(groupby=["bus", "carrier"], groupby_time=False) / 1000
             country_supply = supply_stats.xs(country, level="bus")
-            country_generators_and_storage = country_supply.loc[["Generator", "StorageUnit"], :]
+            #country_generators_and_storage = country_supply.loc[["Generator", "StorageUnit"], :]
+            components = country_supply.index.get_level_values(0).isin(["Generator", "StorageUnit"])
+            country_generators_and_storage = country_supply.loc[components]
             country_dispatch_raw = country_generators_and_storage.T.droplevel(0, axis=1)
 
             ignored_carriers = [
@@ -1190,7 +1194,9 @@ class ResultsPlotter:
 
             withdrawal_stats = n.statistics.withdrawal(groupby=["bus", "carrier"], groupby_time=False) / 1000 # Converted to GWh
             country_withdrawal = withdrawal_stats.xs(country, level="bus")
-            country_generators_and_storage = country_withdrawal.loc[["Generator", "StorageUnit"], :]
+            #country_generators_and_storage = country_withdrawal.loc[["Generator", "StorageUnit"], :]
+            mask = country_withdrawal.index.get_level_values(0).isin(["Generator", "StorageUnit"])
+            country_generators_and_storage = country_withdrawal.loc[mask]
             country_consumption_raw = country_generators_and_storage.T.droplevel(0, axis=1)
 
             carrier_rename = {
@@ -1204,7 +1210,9 @@ class ResultsPlotter:
 
             keek_withdrawal = ["Pumped Hydro Storage"]
             # Drop all other columns except the ones in keek_withdrawal
-            country_consumption_clean = country_consumption[keek_withdrawal]
+            #country_consumption_clean = country_consumption[keek_withdrawal]
+            existing_cols = country_consumption.columns.intersection(keek_withdrawal)
+            country_consumption_clean = country_consumption[existing_cols]
             country_consumption_clean
 
 
@@ -1506,6 +1514,8 @@ class ResultsPlotter:
                 return df[existing + remaining]
 
             country_dispatch_res_twh = reorder_columns(country_dispatch_res, carrier_order) / 1000
+            
+
             country_dispatch_res_twh.plot.bar(
                 stacked=True, width=1.0, ax=axs[1], legend=False,
                 color=color_dict_new,
@@ -1516,7 +1526,13 @@ class ResultsPlotter:
             axs[1].xaxis.grid(False)
             axs[1].set_axisbelow(True)
             axs[1].set_xticks([])
-            axs[1].yaxis.set_major_locator(mpl.ticker.MultipleLocator(2))
+            ymax = country_dispatch_res_twh.sum(axis=1).max()
+
+            if ymax < 2:
+                axs[1].yaxis.set_major_locator(mpl.ticker.MaxNLocator(4))
+            else:
+                axs[1].yaxis.set_major_locator(mpl.ticker.MultipleLocator(2))
+           #axs[1].yaxis.set_major_locator(mpl.ticker.MultipleLocator(2))
             axs[1].yaxis.set_minor_locator(mpl.ticker.MultipleLocator(1))
             axs[1].tick_params(axis="y", which="both", left=False)
 
