@@ -1,108 +1,158 @@
-# PyPSA Energy Crisis Hindcast -- DTU Special Course
+# PyPSA Network Analyzer
+ 
+A post-processing and analysis toolkit for PyPSA hindcast simulations, developed to support the paper:
+ 
+> *"Can Optimal Dispatch Models Recreate Reality? A Retrospective Analysis of Europe's Energy Crisis Using PyPSA-Eur"*  
+> Presented at EEM26, Trondheim - [https://www.ntnu.edu/eem26](https://www.ntnu.edu/eem26)
 
-This repository contains the analysis workflow used in the **DTU Special Course** on modeling the European energy crisis with **PyPSA**.  
-The project focuses on hindcasting the **2021–2024** period using historical data, PyPSA network files, and post-processing scripts to analyze system behavior, dispatch, prices, and CO₂ emissions.
+The tool compares simulated dispatch, prices, generation mix, and CO₂ emissions against historical benchmarks. While the repository is set up to reproduce the paper results, it is designed to work with **any PyPSA `.nc` network file**.
 
 ## Quickstart
-Clone this repository by running the command:
+ 
+Clone the repository locally: 
 ```bash
 git clone https://github.com/marco-saretta/pypsa-network-analyzer.git
 cd pypsa-network-analyzer
 ```
-
-## Environment Setup
-
-### Using `uv` (recommended)
-
-`uv` reads dependencies directly from `pyproject.toml`.
-
+Setup the environment using **`uv` (recommended):**
 ```bash
-# Install uv (if not installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh                                     # macOS / Linux
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
-
-# Install dependencies from pyproject.toml
 uv sync
-
-# Quick run for main.py
-uv run main.py
-
-# To generate plots
-uv run src/pypsa_network_analyzer/plot_figures_paper.py
 ```
-
-
-### Using `conda`
-
-`conda` cannot create environments directly from `pyproject.toml`.
-
+or using **`conda`:**
 ```bash
-# Create and activate environment
-conda create -n pypsa-course python=3.11
-conda activate pypsa-course
-
-# Install project and dependencies
+conda create -n pypsa-course python=3.11 && conda activate pypsa-course
 pip install -e .
 ```
 
-## Repository Structures
+## Reproducing the Paper Results
+ 
+The paper uses 15 network files - one per year (2020–2024) across three scenarios:
+ 
+| Scenario | Fuel prices | Solving approach |
+|---|---|---|
+| Hindcast standard | Static | Full horizon at once |
+| Hindcast dynamic | Dynamic | Full horizon at once |
+| Hindcast dynamic rolling horizon | Dynamic | Two-week rolling horizon |
+ 
+### 1. Download the network files
 
-The directory structure of the project looks like this:
+The 15 solved PyPSA network files are available at:
+ 
+> [**DTU Data**](https://data.dtu.dk/account/articles/31248568)
+
+
+Place the downloaded `.nc` files in:
+
+```
+data/network_files/     <-- Place the 15 ".nc" files downloaded here
+```
+
+### 2. Configure the run
+ 
+`configs/default_config.yaml` is pre-configured with the correct file names. To run a subset of scenarios, comment/uncomment the relevant entries under `network_files`:
+ 
+```yaml
+network_files:
+  - "hindcast_standard_2020.nc"
+  - "hindcast_standard_2021.nc"
+  # ...
+```
+ 
+### 3. Run the analysis
+ 
+First, run `main.py` to process the network files and produce the results CSVs:
+ 
+```bash
+# with uv
+uv run main.py          
+
+# with conda
+python main.py          
+```
+ 
+Then generate the paper figures:
+ 
+```bash
+# with uv
+uv run src/pypsa_network_analyzer/plot_figures_paper.py     
+
+# with conda
+python src/pypsa_network_analyzer/plot_figures_paper.py     
+```
+ 
+Figures are saved to `figures_paper/`.
+
+## Repository Structure
+ 
 ```text
-├── .github/                  # Github actions and dependabot
-│   ├── dependabot.yaml
-│   └── workflows/
-│       └── tests.yaml
+├── .github/                        # GitHub Actions and Dependabot
 │
-├── configs/                         # Hydra configuration files
-│   ├── default_config.yaml          # Main configuration entry point
+├── configs/                        # Hydra configuration files
+│   ├── default_config.yaml         # Main configuration entry point
 │   └── config_results_concat/
 │       └── config_results_concat.yaml
 │
-├── data/                     # Data directory
-│   ├── benchmark
-│   └── network_files         # Place network files here
+├── data/
+│   ├── benchmark/                  # Benchmark data for scoring
+│   └── network_files/              # Place PyPSA .nc files here
 │
-├── docs/                     # Documentation
-│   ├── mkdocs.yml
-│   └── source/
-│       └── index.md
-│                           
-├── src/                          # Source code
-│   └── pypsa_network_analyzer/   
-│       ├── legacy_scripts/       # Old scripts not used
-│       ├── utils/                # Utilities and helpers
-│       ├── __init__.py           
-│       ├── network_analyzer.py   # Analysis for network file
-│       ├── score_analyzer.py     # Compute scores vs benchmark
-│       └── plt_figures_paper.py  # Plot figures for paper
-│       
+├── docs/                           # Documentation
+├── figures_paper/                  # Output figures for the paper
+├── logs/                           # Log files
+├── notebooks/                      # Jupyter notebooks for exploration
+├── outputs/                        # General output files
+├── results/                        # Analysis results (CSV)
+├── results_concat/                 # Concatenated multi-year results
 │
-├── tests/                    # Unit tests
-│   ├── test_api.py
-│   ├── test_data.py
-│   ├── test_model.py
-│   └── __init__.py
+├── src/
+│   └── pypsa_network_analyzer/
+│       ├── utils/                  # Utilities and helpers
+│       ├── __init__.py             # Import packages
+│       ├── entsoe_retrieval.py     # ENTSO-E data fetching
+│       ├── network_analyzer.py     # Core analysis per network file
+│       ├── plot_figures_paper.py   # Figure generation for the paper
+│       └── score_analyzer.py       # Scoring vs benchmark
 │
 ├── .gitignore
 ├── .pre-commit-config.yaml
+├── .python-version
 ├── LICENSE
-├── pyproject.toml            # Project configuration and dependencies
-├── README.md                 # This file
+├── main.py                         # Main entry point
+├── pyproject.toml                  # Project config and dependencies
+├── README.md                       # This file :-)
+└── uv.lock
 ```
 
-## Objective
+## Other Repository Functionalities
+ 
+### Running the network analyzer on a single file
+ 
+To analyze a single PyPSA network file directly, without going through `main.py`:
+ 
+```bash
+uv run src/pypsa_network_analyzer/network_analyzer.py      # with uv
+python src/pypsa_network_analyzer/network_analyzer.py      # with conda
+```
+ 
+### Using the tool with your own networks
+ 
+Place your `.nc` files in `data/network_files/` and update `configs/default_config.yaml`:
+ 
+```yaml
+network_files:
+  - "your_network_file.nc"
+```
+ 
+Then run `main.py` as above. The tool will produce dispatch comparisons, price diagnostics, energy-mix breakdowns, CO₂ emissions analysis, and benchmark scores for any valid PyPSA network.
+ 
+### Fetching live ENTSO-E data
+ 
+Scripts that retrieve live data from ENTSO-E are available in `utils/` via `entsoe_retrieval.py`. An API key is required and can be set in `configs/default_config.yaml`:
+ 
+```yaml
+api_key: YOUR-ENTSOE-API-KEY
+```
 
-The repository is designed to **analyze PyPSA hindcast simulations** using pre-downloaded historical data and pre-built PyPSA networks.
-
-It supports:
-
-- Comparison of dispatch across countries and buses
-- Energy-mix breakdowns by carrier
-- CO2 emissions analysis
-- Electricity price diagnostics
-- Installed capacity and generation statistics
-- Script-based, reproducible analysis (no notebooks required)
 
 ## Configuration
 
@@ -159,46 +209,6 @@ metrics:
 - **`metrics`**  
   Error metrics computed when comparing simulations.
 
-## Workflow
-
-### Using `uv`
-
-Run scripts inside the managed environment without manual activation:
-
-```bash
-uv run main.py
-```
-
-or directly:
-
-```bash
-uv run src/pypsa_network_analyzer/scripts/network_analyzer.py
-```
-
----
-
-### Using `conda`
-
-Activate the environment first:
-
-```bash
-conda activate pypsa-course
-```
-
-Then run:
-
-```bash
-python main.py
-```
-
-or:
-
-```bash
-python src/pypsa_network_analyzer/scripts/network_analyzer.py
-```
-
-Each script is self-contained and produces figures and summaries relevant to a specific analysis task.
-
 ## Data
 
 All datasets required for the hindcast analyses  
@@ -210,10 +220,6 @@ All datasets required for the hindcast analyses
 **ENTSO-E API tokens are not included.**  
 Scripts that require live ENTSO-E access are optional and clearly separated in `utils/`.
 
-## Presentations
-
-The `presentation/` directory contains course slides documenting the
-modeling setup, data collection, and interpretation of results.
 
 ## Authors
 
