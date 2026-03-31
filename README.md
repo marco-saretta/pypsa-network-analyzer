@@ -5,7 +5,9 @@ A post-processing and analysis toolkit for PyPSA hindcast simulations, developed
 > *"Can Optimal Dispatch Models Recreate Reality? A Retrospective Analysis of Europe's Energy Crisis Using PyPSA-Eur"*  
 > Presented at EEM26, Trondheim - [https://www.ntnu.edu/eem26](https://www.ntnu.edu/eem26)
 
-The tool compares simulated dispatch, prices, generation mix, and CO₂ emissions against historical benchmarks. While the repository is set up to reproduce the paper results, it is designed to work with **any PyPSA `.nc` network file**.
+The tool compares simulated dispatch, prices, generation mix, and CO $_2$ emissions against historical benchmarks. While the repository is set up to reproduce the paper results, it is designed to work with **any PyPSA `.nc` network file**.
+
+Solved PyPSA network files relative to the publication are hosted at [DTU data](https://data.dtu.dk/articles/media/PyPSA_Network_files_use_for_the_paper_Can_Optimal_Dispatch_Models_Recreate_Reality_/31248568/1)
 
 ## Quickstart
  
@@ -26,20 +28,21 @@ pip install -e .
 
 ## Reproducing the Paper Results
  
-The paper uses 15 network files - one per year (2020–2024) across three scenarios:
+The paper simulated three scenarios:
  
 | Scenario | Fuel prices | Solving approach |
 |---|---|---|
 | Hindcast standard | Static | Full horizon at once |
 | Hindcast dynamic | Dynamic | Full horizon at once |
 | Hindcast dynamic rolling horizon | Dynamic | Two-week rolling horizon |
- 
-### 1. Download the network files
+
+Each scenario has hourly granularity, solved yearly from 2020 to 2024. This results in 5 network files per simulation, and totalling 15 files for all scenarios.
+
+### 1. Download the solved network files
 
 The 15 solved PyPSA network files are available at:
  
-> [**DTU Data**](https://data.dtu.dk/account/articles/31248568)
-
+> [DTU data](https://data.dtu.dk/articles/media/PyPSA_Network_files_use_for_the_paper_Can_Optimal_Dispatch_Models_Recreate_Reality_/31248568/1)
 
 Place the downloaded `.nc` files in:
 
@@ -49,7 +52,9 @@ data/network_files/     <-- Place the 15 ".nc" files downloaded here
 
 ### 2. Configure the run
  
-`configs/default_config.yaml` is pre-configured with the correct file names. To run a subset of scenarios, comment/uncomment the relevant entries under `network_files`:
+`configs/default_config.yaml` is pre-configured with the correct file names. There is **no need** to edit the default `.yaml` file.
+
+However, to run a subset of scenarios, comment/uncomment the relevant entries under `network_files`:
  
 ```yaml
 network_files:
@@ -211,8 +216,9 @@ metrics:
 
 ## Data
 
-All datasets required for the hindcast analyses  
-(load, generation, prices, capacities, emissions) are either:
+Data relative to the solved network files is available at [DTU data](https://data.dtu.dk/articles/media/PyPSA_Network_files_use_for_the_paper_Can_Optimal_Dispatch_Models_Recreate_Reality_/31248568/1).
+
+Input data required for the hindcast analyses(load, generation, prices, capacities, emissions) are either:
 
 - already included, or
 - expected to be locally available in preprocessed form.
